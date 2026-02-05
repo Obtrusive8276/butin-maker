@@ -85,6 +85,45 @@ class TestQBittorrentServiceTorrent:
         if not success:
             assert "error" in result
 
+    def test_create_torrent_file_name_includes_extension(self, tmp_path):
+        """Test que le contenu inclut l'extension mais pas le nom du torrent"""
+        source_file = tmp_path / "The.Onion.Movie.2008.mkv"
+        source_file.write_text("fake")
+
+        class FakeTorrent:
+            last_instance = None
+
+            def __init__(self, path):
+                self.path = path
+                self.name = None
+                self.private = None
+                self.piece_size = None
+                self.trackers = None
+                self.infohash = "deadbeef"
+                self.size = 123
+                self.pieces = 4
+                FakeTorrent.last_instance = self
+
+            def generate(self):
+                return None
+
+            def write(self, output_file, overwrite=True):
+                return None
+
+        with patch('app.services.qbittorrent_service.torf.Torrent', new=FakeTorrent):
+            with patch('app.services.qbittorrent_service.settings') as mock_settings:
+                mock_settings.output_path = tmp_path
+
+                success, result = self.service.create_torrent(
+                    source_path=str(source_file),
+                    name="The.Onion.Movie.2008"
+                )
+
+                assert success is True
+                assert result["torrent_name"] == "The.Onion.Movie.2008"
+                assert FakeTorrent.last_instance is not None
+                assert FakeTorrent.last_instance.name == "The.Onion.Movie.2008.mkv"
+
 
 class TestQBittorrentServiceSeeding:
     """Tests pour l'ajout de torrents pour seeding"""

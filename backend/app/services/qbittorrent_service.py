@@ -61,10 +61,18 @@ class QBittorrentService:
             if not source.exists():
                 return False, {"error": f"Le chemin n'existe pas: {source_path}"}
             
-            torrent_name = name or source.name
+            if source.is_file():
+                source_ext = source.suffix
+                content_name = name or source.name
+                if source_ext and not content_name.lower().endswith(source_ext.lower()):
+                    content_name = f"{content_name}{source_ext}"
+                torrent_name = name or source.stem
+            else:
+                content_name = name or source.name
+                torrent_name = name or source.name
             
             t = torf.Torrent(path=source_path)
-            t.name = torrent_name
+            t.name = content_name
             t.private = private
             
             if piece_size:

@@ -530,7 +530,7 @@ npm run dev
 
 ## 🧪 Tests Unitaires
 
-### Backend (174 tests)
+### Backend (177 tests)
 
 Les tests sont situés dans `backend/tests/` et couvrent :
 

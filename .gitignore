@@ -60,6 +60,7 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+docker-compose.dev.yml
 
 # Application generated files
 output/

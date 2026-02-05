@@ -61,6 +61,8 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 docker-compose.dev.yml
+Modèle présentation.txt
+Modelfile.txt
 
 # Application generated files
 output/

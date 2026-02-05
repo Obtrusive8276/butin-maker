@@ -28,8 +28,7 @@ services:
     volumes:
       - ./config:/config
       - ./output:/app/output
-      - ./tags_data.json:/app/data/tags_data.json:ro
-      # Vos fichiers à uploader (lecture seule)
+      # Montez votre dossier de médias ici
       - /path/to/your/media:/data:ro
     ports:
       - "8000:8000"
@@ -42,11 +41,6 @@ services:
       - "3000:80"
     depends_on:
       - backend
-```
-
-Téléchargez aussi le fichier des tags :
-```bash
-curl -O https://raw.githubusercontent.com/Obtrusive8276/butin-maker/main/tags_data.json
 ```
 
 Lancez :

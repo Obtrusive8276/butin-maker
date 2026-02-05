@@ -530,7 +530,7 @@ npm run dev
 
 ## 🧪 Tests Unitaires
 
-### Backend (169 tests)
+### Backend (174 tests)
 
 Les tests sont situés dans `backend/tests/` et couvrent :
 
@@ -545,6 +545,7 @@ Les tests sont situés dans `backend/tests/` et couvrent :
 | `test_mediainfo_service.py` | **Nouveau** - Parsing MediaInfo, génération NFO, durée, exceptions |
 | `test_config.py` | **Nouveau** - UserSettings DEFAULTS, load, get (fusion), save, update |
 | `test_routers.py` | Validation des routers FastAPI |
+| `test_hardlink_existing.py` | **Nouveau** - Gestion des hardlinks existants |
 | `conftest.py` | Fixtures partagées |
 
 ### Tests Réalistes (`test_realistic_releases.py`)
@@ -662,3 +663,68 @@ DEFAULTS = {
 ### Fusion avec Defaults
 
 La méthode `get()` fusionne automatiquement les settings sauvegardés avec les valeurs par défaut, garantissant que toutes les clés existent même après une mise à jour.
+
+---
+
+## 📝 Notes de Maintenance
+
+### Duplications de Code Identifiées
+
+| Priorité | Problème | Fichiers concernés | Solution suggérée |
+|----------|----------|-------------------|-------------------|
+| **Haute** | Fonctions copier presse-papier dupliquées | `Finalize.tsx`, `RenameEditor.tsx`, `MediaInfoViewer.tsx` | Créer un hook `useClipboard.ts` réutilisable |
+| **Haute** | Logique de détection résolution dupliquée | `naming_service.py`, `MediaInfoViewer.tsx`, `Finalize.tsx` | Extraire une fonction utilitaire partagée |
+| Moyenne | Méthodes TMDB similaires | `tmdb_service.py` | Créer une méthode `_make_request()` générique |
+| Moyenne | Détection langue en double | `naming_service.py` | Fusionner `detect_audio_languages()` et `detect_language_info()` |
+| Basse | Backend helpers.py inutilisé | `helpers.py` | Supprimer ou utiliser pour formatage backend |
+
+### API Backend - Endpoints Disponibles
+
+#### Fichiers (`/files`)
+- `GET /files/root` - Racine du répertoire média
+- `GET /files/list?path=&filter_type=` - Liste un répertoire
+- `GET /files/info?path=` - Infos sur un fichier
+- `GET /files/directory-size?path=` - Taille d'un dossier
+- `GET /files/first-video?path=` - Premier fichier vidéo dans un dossier
+- `GET /files/video-count?path=` - Nombre de fichiers vidéo
+- `GET /files/search?path=&query=&filter_type=` - Recherche de fichiers
+- **POST `/files/create-hardlink`** - Création de hardlink (Nouveau)
+
+#### Torrent (`/torrent`)
+- `POST /torrent/test-connection` - Test connexion qBittorrent
+- `POST /torrent/create` - Création d'un torrent
+- `GET /torrent/download/{filename}` - Téléchargement du fichier .torrent
+- `POST /torrent/add-for-seeding` - Ajout pour seeding
+
+#### MediaInfo (`/mediainfo`)
+- `GET /mediainfo/analyze?path=` - Analyse MediaInfo
+- `GET /mediainfo/raw?path=` - Output brut MediaInfo
+- `POST /mediainfo/generate-nfo?path=&release_name=` - Génération NFO
+- `GET /mediainfo/download-nfo/{filename}` - Téléchargement NFO
+
+#### TMDB (`/tmdb`)
+- `GET /tmdb/status` - Statut configuration API
+- `GET /tmdb/search?query=&type=` - Recherche films/séries
+- `GET /tmdb/movie/{movie_id}` - Détails film
+- `GET /tmdb/tv/{tv_id}` - Détails série
+- `POST /tmdb/generate-name` - Génération nom de release
+- `GET /tmdb/detect-episode?filename=` - Détection saison/épisode
+- `GET /tmdb/extract-title?filename=` - Extraction titre
+- `GET /tmdb/search-from-filename?filename=&type=` - Recherche depuis nom fichier
+
+#### Présentation (`/presentation`)
+- `POST /presentation/generate` - Génération BBCode
+- `GET /presentation/template` - Récupération template
+- `POST /presentation/template` - Sauvegarde template
+
+#### Tags (`/tags`)
+- `GET /tags/` - Tous les tags
+- `GET /tags/categories` - Catégories principales
+- `GET /tags/category/{slug}` - Détails catégorie
+- `GET /tags/subcategories/{category_slug}` - Sous-catégories
+
+#### Settings (`/settings`)
+- `GET /settings/` - Récupération settings
+- `POST /settings/` - Sauvegarde settings
+- `PATCH /settings/qbittorrent` - Mise à jour qBittorrent
+- `PATCH /settings/tracker` - Mise à jour tracker

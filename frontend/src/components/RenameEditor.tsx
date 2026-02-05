@@ -26,8 +26,15 @@ export default function RenameEditor() {
   const [language, setLanguage] = useState('');
   const [hardlinkPath, setHardlinkPath] = useState('');
   const [nfoGenerated, setNfoGenerated] = useState(false);
+  const [hasGenerated, setHasGenerated] = useState(false);
 
   const selectedItem = selectedFiles[0];
+
+  // Forcer l'auto-détection au montage du composant
+  useEffect(() => {
+    setLanguage('');
+    setHasGenerated(false);
+  }, []);
 
   // Mutation pour générer le NFO avec le nom de release
   const generateNfoMutation = useMutation({
@@ -41,21 +48,30 @@ export default function RenameEditor() {
   });
 
   const generateNameMutation = useMutation({
-    mutationFn: () => tmdbApi.generateReleaseName(
-      tmdbInfo?.title || selectedItem?.name || '',
-      tmdbInfo?.year || null,
-      mediaInfo || {},
-      {
-        source: source || undefined,
-        contentType: contentType,
-        season: seriesInfo.season || undefined,
-        episode: seriesInfo.episode || undefined,
-        isCompleteSeason: seriesInfo.isCompleteSeason,
-        edition: edition || undefined,
-        info: info || undefined,
+    mutationFn: () => {
+      // Log pour debug
+      console.log('Generate release name:', {
+        mediaInfo,
+        audioTracks: mediaInfo?.audio_tracks,
         language: language || undefined,
-      }
-    ),
+      });
+      
+      return tmdbApi.generateReleaseName(
+        tmdbInfo?.title || selectedItem?.name || '',
+        tmdbInfo?.year || null,
+        mediaInfo || {},
+        {
+          source: source || undefined,
+          contentType: contentType,
+          season: seriesInfo.season || undefined,
+          episode: seriesInfo.episode || undefined,
+          isCompleteSeason: seriesInfo.isCompleteSeason,
+          edition: edition || undefined,
+          info: info || undefined,
+          language: language || undefined,
+        }
+      );
+    },
     onSuccess: (data) => {
       setReleaseName(data.release_name);
       if (selectedItem) {
@@ -70,15 +86,42 @@ export default function RenameEditor() {
   });
 
   useEffect(() => {
-    if (selectedItem && (tmdbInfo || mediaInfo)) {
+    // Réinitialiser hasGenerated quand on change de fichier ou de langue manuelle
+    setHasGenerated(false);
+  }, [selectedItem?.path, language]);
+
+  useEffect(() => {
+    // Ne générer que si on a les infos nécessaires et si ce n'est pas déjà fait
+    if (selectedItem && mediaInfo && tmdbInfo && !hasGenerated) {
+      console.log('Generating release name with:', {
+        audioTracks: mediaInfo.audio_tracks,
+        trackCount: mediaInfo.audio_tracks?.length,
+        language: language || 'auto-detection'
+      });
+      setHasGenerated(true);
       generateNameMutation.mutate();
     }
-  }, [tmdbInfo, mediaInfo, source, edition, info, language]);
+  }, [selectedItem, mediaInfo, tmdbInfo, hasGenerated]);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(releaseName);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    if (!releaseName || releaseName.trim() === '') {
+      console.error('Pas de nom de release à copier');
+      return;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(releaseName);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Erreur lors de la copie:', error);
+      // Fallback: sélectionner le texte dans l'input
+      const input = document.querySelector('input[type="text"]');
+      if (input instanceof HTMLInputElement) {
+        input.select();
+        input.setSelectionRange(0, 99999);
+      }
+    }
   };
 
   const handleReleaseNameChange = (newName: string) => {

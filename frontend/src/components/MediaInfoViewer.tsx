@@ -115,10 +115,26 @@ export default function MediaInfoViewer() {
   }, [mediaInfo, setMediaInfo, setPresentationData]);
 
   const handleCopyRaw = async () => {
-    if (rawInfo) {
+    if (!rawInfo || rawInfo.trim() === '') {
+      console.error('Pas de contenu à copier');
+      return;
+    }
+    
+    try {
       await navigator.clipboard.writeText(rawInfo);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Erreur lors de la copie:', error);
+      // Fallback: sélectionner le texte dans le pre
+      const pre = document.querySelector('pre');
+      if (pre) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(pre);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
     }
   };
 

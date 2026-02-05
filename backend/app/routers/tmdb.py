@@ -82,6 +82,12 @@ async def generate_release_name(
     if not media_info:
         media_info = {}
     
+    # Debug log
+    print(f"[DEBUG] Generate release name:")
+    print(f"  - title: {title}")
+    print(f"  - language param: {language}")
+    print(f"  - audio_tracks: {media_info.get('audio_tracks', [])}")
+    
     release_name = naming_service.generate_release_name(
         title=title,
         year=year,
@@ -99,6 +105,8 @@ async def generate_release_name(
         info=info,
         language=language
     )
+    
+    print(f"  - generated: {release_name}")
     
     return {"release_name": release_name}
 

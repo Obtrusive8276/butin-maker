@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import os
+import shutil
 
 from app.config import settings
 
@@ -251,6 +252,123 @@ class FileService:
         except Exception as e:
             print(f"Erreur recherche: {e}")
             return []
+    
+    def create_hardlink(self, source_path: str, destination_path: str) -> Tuple[bool, str]:
+        """Crée un hardlink entre la source et la destination
+        
+        Args:
+            source_path: Chemin du fichier/dossier source
+            destination_path: Chemin de destination du hardlink
+            
+        Returns:
+            Tuple (success, message)
+        """
+        try:
+            source = Path(source_path)
+            destination = Path(destination_path)
+            
+            # Vérifier que la source existe
+            if not source.exists():
+                return False, f"La source n'existe pas: {source_path}"
+            
+            # Vérifier que la source est autorisée (dans media_root)
+            if not self._is_path_allowed(source):
+                return False, "Accès refusé: la source n'est pas dans le répertoire média"
+            
+            # Créer le dossier parent de destination s'il n'existe pas
+            destination_parent = destination.parent
+            try:
+                destination_parent.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                return False, f"Impossible de créer le dossier destination: {str(e)}"
+            
+            # Vérifier si la destination existe déjà
+            if destination.exists():
+                # Vérifier si c'est déjà un hardlink vers la même source
+                if destination.is_file():
+                    try:
+                        if destination.stat().st_ino == source.stat().st_ino:
+                            # Même inode = même fichier (déjà hardlinké)
+                            return True, f"Hardlink déjà existant: {destination_path}"
+                    except:
+                        pass
+                # Pour les dossiers, on vérifie si le dossier existe et on traite les fichiers
+                elif source.is_dir() and destination.is_dir():
+                    # Continuer pour traiter les fichiers manquants dans le dossier
+                    pass
+                else:
+                    return False, f"La destination existe déjà: {destination_path}"
+            
+            # Créer le hardlink
+            if source.is_file():
+                # Hardlink pour un fichier
+                try:
+                    os.link(source, destination)
+                    return True, f"Hardlink créé: {destination_path}"
+                except OSError as e:
+                    if e.errno == 18:  # EXDEV - Cross-device link
+                        return False, "Impossible de créer le hardlink: la source et la destination doivent être sur le même système de fichiers"
+                    elif e.errno == 1:  # EPERM - Operation not permitted
+                        return False, f"Impossible de créer le hardlink: {str(e)}"
+                    else:
+                        return False, f"Erreur lors de la création du hardlink: {str(e)}"
+            elif source.is_dir():
+                # Pour les dossiers, on crée un dossier et on hardlink chaque fichier
+                try:
+                    destination.mkdir(parents=True, exist_ok=True)
+                    linked_count = 0
+                    skipped_count = 0
+                    error_count = 0
+                    
+                    for item in source.rglob('*'):
+                        if item.is_file():
+                            rel_path = item.relative_to(source)
+                            dest_file = destination / rel_path
+                            dest_file.parent.mkdir(parents=True, exist_ok=True)
+                            
+                            # Vérifier si le fichier existe déjà
+                            if dest_file.exists():
+                                try:
+                                    if dest_file.stat().st_ino == item.stat().st_ino:
+                                        # Même inode = déjà hardlinké
+                                        skipped_count += 1
+                                        continue
+                                    else:
+                                        # Fichier différent, on skip avec un warning
+                                        skipped_count += 1
+                                        continue
+                                except:
+                                    skipped_count += 1
+                                    continue
+                            
+                            try:
+                                os.link(item, dest_file)
+                                linked_count += 1
+                            except OSError:
+                                # Si le hardlink échoue, on copie
+                                try:
+                                    shutil.copy2(item, dest_file)
+                                    error_count += 1
+                                except:
+                                    error_count += 1
+                    
+                    messages = []
+                    if linked_count > 0:
+                        messages.append(f"{linked_count} hardlinks créés")
+                    if skipped_count > 0:
+                        messages.append(f"{skipped_count} fichiers déjà existants ignorés")
+                    if error_count > 0:
+                        messages.append(f"{error_count} copies (erreur de hardlink)")
+                    
+                    return True, f"Dossier traité: {', '.join(messages)}"
+                        
+                except Exception as e:
+                    return False, f"Erreur lors de la création des hardlinks: {str(e)}"
+            
+            return False, "Type de source non supporté"
+            
+        except Exception as e:
+            return False, f"Erreur inattendue: {str(e)}"
 
 
 file_service = FileService()

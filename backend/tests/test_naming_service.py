@@ -242,6 +242,34 @@ class TestNamingServiceLanguages:
         }
         result = self.service.detect_audio_languages(media_info)
         assert result == "MULTi"
+    
+    def test_detect_multi_french_english_from_nfo(self):
+        """Test détection MULTi avec French + English (cas réel NFO The Onion Movie)
+        
+        Bug rapporté: Le système génère 'TrueFrench' au lieu de 'MULTi'
+        quand il y a 2 pistes audio (French + English) sans titre spécifique VFF/VFQ
+        """
+        media_info = {
+            "audio_tracks": [
+                {"language": "fr", "title": "Stereo"},  # Piste 1: French sans tag VFF/VFQ
+                {"language": "en", "title": "Surround"}  # Piste 2: English
+            ]
+        }
+        result = self.service.detect_audio_languages(media_info)
+        # Devrait être MULTi.TrueFrench car French + English
+        assert result == "MULTi.TrueFrench", f"Attendu: MULTi.TrueFrench, Obtenu: {result}"
+    
+    def test_detect_multi_three_languages(self):
+        """Test détection MULTi avec 3 langues (French + English + Spanish)"""
+        media_info = {
+            "audio_tracks": [
+                {"language": "fr", "title": "French"},
+                {"language": "en", "title": "English"},
+                {"language": "es", "title": "Spanish"}
+            ]
+        }
+        result = self.service.detect_audio_languages(media_info)
+        assert result == "MULTi.TrueFrench"
 
 
 class TestNamingServiceCodecs:

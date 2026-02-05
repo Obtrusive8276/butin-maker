@@ -1,8 +1,14 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Body
 from typing import Optional, List
+from pydantic import BaseModel
 from ..services.file_service import file_service
 
 router = APIRouter(prefix="/files", tags=["files"])
+
+
+class HardlinkRequest(BaseModel):
+    source_path: str
+    destination_path: str
 
 
 @router.get("/root")
@@ -68,3 +74,19 @@ async def search_files(
         "path": path,
         "results": results
     }
+
+
+@router.post("/create-hardlink")
+async def create_hardlink(data: HardlinkRequest):
+    """Crée un hardlink entre la source et la destination
+    
+    Pour les fichiers: crée un hardlink direct
+    Pour les dossiers: crée un dossier et hardlink chaque fichier à l'intérieur
+    
+    Note: Les hardlinks ne fonctionnent que sur le même système de fichiers
+    """
+    success, message = file_service.create_hardlink(
+        data.source_path,
+        data.destination_path
+    )
+    return {"success": success, "message": message}

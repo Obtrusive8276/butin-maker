@@ -57,6 +57,14 @@ export const filesApi = {
     const response = await api.get(`/files/search?${params}`);
     return response.data;
   },
+
+  createHardlink: async (sourcePath: string, destinationPath: string) => {
+    const response = await api.post('/files/create-hardlink', {
+      source_path: sourcePath,
+      destination_path: destinationPath
+    });
+    return response.data;
+  },
 };
 
 export const torrentApi = {
@@ -257,7 +265,7 @@ export const tmdbApi = {
     if (options?.episodeOnly) params.append('episode_only', 'true');
     if (options?.edition) params.append('edition', options.edition);
     if (options?.info) params.append('info', options.info);
-    if (options?.language) params.append('language', options.language);
+    if (options?.language !== undefined) params.append('language', options.language);
     
     const response = await api.post(`/tmdb/generate-name?${params}`, mediaInfo);
     return response.data;

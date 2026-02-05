@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { FileDown, Check, AlertCircle, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
-import { torrentApi } from '../services/api';
+import { FileDown, Check, AlertCircle, ArrowRight, ArrowLeft, Loader2, Link2 } from 'lucide-react';
+import { torrentApi, filesApi } from '../services/api';
 import { useAppStore } from '../stores/appStore';
 
 export default function TorrentCreator() {
@@ -9,11 +9,31 @@ export default function TorrentCreator() {
   const [torrentName, setTorrentName] = useState('');
   const [pieceSize, setPieceSize] = useState<number | undefined>(undefined);
   const [trackerUrl, setTrackerUrl] = useState(settings?.tracker.announce_url || '');
+  const [createHardlink, setCreateHardlink] = useState(true);
+  const [hardlinkResult, setHardlinkResult] = useState<{success: boolean; message: string} | null>(null);
+
+  const hardlinkPath = releaseName && selectedFiles[0] 
+    ? `${settings?.paths?.hardlink_path || '/data/hardlinks'}/${releaseName}${selectedFiles[0].is_dir ? '' : '.' + selectedFiles[0].name.split('.').pop()}`
+    : '';
+
+  const hardlinkMutation = useMutation({
+    mutationFn: () => filesApi.createHardlink(selectedFiles[0].path, hardlinkPath),
+    onSuccess: (data) => {
+      setHardlinkResult(data);
+    },
+    onError: (error: any) => {
+      setHardlinkResult({ success: false, message: error.message || 'Erreur lors de la création du hardlink' });
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: torrentApi.createTorrent,
     onSuccess: (data) => {
       setTorrentResult(data);
+      // Créer le hardlink après la création du torrent si activé
+      if (createHardlink && hardlinkPath) {
+        hardlinkMutation.mutate();
+      }
     },
   });
 
@@ -107,6 +127,55 @@ export default function TorrentCreator() {
             <Check className="w-4 h-4 text-green-400" />
             <span>Torrent privé activé</span>
           </div>
+        </div>
+      </div>
+
+      {/* Hardlink */}
+      <div className="bg-gray-800 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Link2 className="w-5 h-5 text-primary-500" />
+          <h3 className="text-lg font-semibold">Hardlink</h3>
+        </div>
+        
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={createHardlink}
+              onChange={(e) => setCreateHardlink(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-primary-500 focus:ring-primary-500"
+            />
+            <span className="text-sm">Créer un hardlink avec le nom de release</span>
+          </label>
+          
+          {createHardlink && (
+            <div className="bg-gray-700 rounded p-3 text-sm">
+              <p className="text-gray-400 mb-1">Destination du hardlink:</p>
+              <p className="font-mono text-primary-400 break-all">{hardlinkPath || 'Non configuré'}</p>
+              {!settings?.paths?.hardlink_path && (
+                <p className="text-xs text-yellow-500 mt-2">
+                  Configurez le chemin des hardlinks dans les paramètres
+                </p>
+              )}
+            </div>
+          )}
+          
+          {hardlinkResult && (
+            <div className={`rounded p-3 text-sm ${
+              hardlinkResult.success ? 'bg-green-900/30 border border-green-700' : 'bg-red-900/30 border border-red-700'
+            }`}>
+              <div className="flex items-center gap-2">
+                {hardlinkResult.success ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-400" />
+                )}
+                <span className={hardlinkResult.success ? 'text-green-400' : 'text-red-400'}>
+                  {hardlinkResult.message}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

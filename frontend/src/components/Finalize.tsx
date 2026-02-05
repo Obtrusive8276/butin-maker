@@ -94,7 +94,14 @@ export default function Finalize() {
   const generatePresentationMutation = useMutation({
     mutationFn: presentationApi.generate,
     onSuccess: (data) => {
-      setGeneratedBBCode(data.bbcode);
+      if (data.bbcode && data.bbcode.trim() !== '') {
+        setGeneratedBBCode(data.bbcode);
+      } else {
+        console.error('BBCode vide reçu du serveur');
+      }
+    },
+    onError: (error) => {
+      console.error('Erreur lors de la génération de la présentation:', error);
     },
   });
 
@@ -304,9 +311,24 @@ export default function Finalize() {
   };
 
   const handleCopyBBCode = async () => {
-    await navigator.clipboard.writeText(generatedBBCode);
-    setCopiedBBCode(true);
-    setTimeout(() => setCopiedBBCode(false), 2000);
+    if (!generatedBBCode || generatedBBCode.trim() === '') {
+      console.error('Pas de BBCode à copier');
+      return;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(generatedBBCode);
+      setCopiedBBCode(true);
+      setTimeout(() => setCopiedBBCode(false), 2000);
+    } catch (error) {
+      console.error('Erreur lors de la copie:', error);
+      // Fallback: sélectionner le texte pour copie manuelle
+      const textarea = document.querySelector('textarea');
+      if (textarea) {
+        textarea.select();
+        textarea.setSelectionRange(0, 99999);
+      }
+    }
   };
 
   const handleGoToUpload = () => {

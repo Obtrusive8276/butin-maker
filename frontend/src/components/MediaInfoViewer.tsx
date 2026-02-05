@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, ArrowLeft, Loader2, Check, Copy, FolderOpen, AlertCircle } from 'lucide-react';
 import { mediainfoApi, filesApi, tmdbApi } from '../services/api';
 import { useAppStore } from '../stores/appStore';
-import { formatSize, formatDuration } from '../utils/format';
+import { formatSize, formatDuration, getResolutionFromWidth } from '../utils/format';
+import { useClipboard } from '../hooks/useClipboard';
 
 export default function MediaInfoViewer() {
   const { 
@@ -16,7 +17,7 @@ export default function MediaInfoViewer() {
     setMediaInfoFilePath
   } = useAppStore();
   const [showRaw, setShowRaw] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { copy: copyRawInfo, copied } = useClipboard();
   const [videoFileForAnalysis, setVideoFileForAnalysis] = useState<string | null>(null);
 
   const selectedItem = selectedFiles[0];
@@ -84,24 +85,11 @@ export default function MediaInfoViewer() {
       const video = mediaInfo.video_tracks[0];
       const audio = mediaInfo.audio_tracks[0];
       
-      // Utiliser la largeur pour déterminer la résolution (pour les formats scope/cinémascope)
-      // 1920 de largeur = 1080p, 1280 = 720p, 3840 = 2160p
-      let quality = '';
-      if (video) {
-        const width = video.width || 0;
-        if (width >= 3840) {
-          quality = '2160p';
-        } else if (width >= 1920) {
-          quality = '1080p';
-        } else if (width >= 1280) {
-          quality = '720p';
-        } else {
-          quality = `${video.height}p`;
-        }
-      }
+      // Utiliser la fonction utilitaire pour déterminer la résolution
+      const quality = getResolutionFromWidth(video?.width);
       
       setPresentationData({
-        quality,
+        quality: quality === 'Unknown' ? '' : quality,
         format: mediaInfo.container || '',
         video_codec: video?.codec || '',
         audio_codec: audio?.codec || '',
@@ -114,27 +102,9 @@ export default function MediaInfoViewer() {
     }
   }, [mediaInfo, setMediaInfo, setPresentationData]);
 
-  const handleCopyRaw = async () => {
-    if (!rawInfo || rawInfo.trim() === '') {
-      console.error('Pas de contenu à copier');
-      return;
-    }
-    
-    try {
-      await navigator.clipboard.writeText(rawInfo);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('Erreur lors de la copie:', error);
-      // Fallback: sélectionner le texte dans le pre
-      const pre = document.querySelector('pre');
-      if (pre) {
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(pre);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
+  const handleCopyRaw = () => {
+    if (rawInfo) {
+      copyRawInfo(rawInfo);
     }
   };
 

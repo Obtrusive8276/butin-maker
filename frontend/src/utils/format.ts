@@ -23,3 +23,24 @@ export const formatDuration = (seconds: number | null): string => {
   const s = Math.floor(seconds % 60);
   return h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
 };
+
+/**
+ * Détermine la résolution standard à partir de la largeur en pixels
+ * 
+ * Règles:
+ * - width >= 3840 : 2160p (4K)
+ * - width >= 1920 : 1080p (Full HD)
+ * - width >= 1280 : 720p (HD)
+ * - width >= 1024 : 576p (SD)
+ * - width >= 720  : 480p (SD)
+ * - sinon         : {width}p
+ */
+export const getResolutionFromWidth = (width: number | null | undefined): string => {
+  if (!width) return 'Unknown';
+  if (width >= 3840) return '2160p';
+  if (width >= 1920) return '1080p';
+  if (width >= 1280) return '720p';
+  if (width >= 1024) return '576p';
+  if (width >= 720) return '480p';
+  return `${width}p`;
+};

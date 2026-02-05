@@ -670,13 +670,30 @@ La méthode `get()` fusionne automatiquement les settings sauvegardés avec les 
 
 ### Duplications de Code Identifiées
 
-| Priorité | Problème | Fichiers concernés | Solution suggérée |
-|----------|----------|-------------------|-------------------|
-| **Haute** | Fonctions copier presse-papier dupliquées | `Finalize.tsx`, `RenameEditor.tsx`, `MediaInfoViewer.tsx` | Créer un hook `useClipboard.ts` réutilisable |
-| **Haute** | Logique de détection résolution dupliquée | `naming_service.py`, `MediaInfoViewer.tsx`, `Finalize.tsx` | Extraire une fonction utilitaire partagée |
-| Moyenne | Méthodes TMDB similaires | `tmdb_service.py` | Créer une méthode `_make_request()` générique |
-| Moyenne | Détection langue en double | `naming_service.py` | Fusionner `detect_audio_languages()` et `detect_language_info()` |
-| Basse | Backend helpers.py inutilisé | `helpers.py` | Supprimer ou utiliser pour formatage backend |
+| Priorité | Problème | Fichiers concernés | Statut | Solution implémentée |
+|----------|----------|-------------------|--------|---------------------|
+| **Haute** | Fonctions copier presse-papier dupliquées | `Finalize.tsx`, `RenameEditor.tsx`, `MediaInfoViewer.tsx` | ✅ **FAIT** | Hook `useClipboard.ts` créé et utilisé dans tous les composants |
+| **Haute** | Logique de détection résolution dupliquée | `naming_service.py`, `MediaInfoViewer.tsx`, `Finalize.tsx` | ✅ **FAIT** | Fonction `getResolutionFromWidth()` extraite dans `utils/format.ts` |
+| Moyenne | Méthodes TMDB similaires | `tmdb_service.py` | ✅ **FAIT** | Méthode `_make_request()` générique créée avec helpers `_format_movie_result()` et `_format_tv_result()` |
+| Moyenne | Détection langue en double | `naming_service.py` | ⏳ **PAS NÉCESSAIRE** | `detect_language_info()` non utilisée actuellement |
+| Basse | Backend helpers.py inutilisé | `helpers.py` | ⏳ **À FAIRE** | Peut être supprimé ou utilisé pour formatage backend |
+
+### Hooks et Utilitaires Créés
+
+#### useClipboard.ts
+Hook React réutilisable pour la copie dans le presse-papier :
+```typescript
+const { copy, copied, error } = useClipboard(timeout?: number);
+```
+Utilisé dans : `Finalize.tsx`, `RenameEditor.tsx`, `MediaInfoViewer.tsx`
+
+#### getResolutionFromWidth()
+Fonction utilitaire dans `utils/format.ts` :
+```typescript
+export const getResolutionFromWidth = (width: number | null | undefined): string
+```
+Règles : 3840→2160p, 1920→1080p, 1280→720p, etc.
+Utilisée dans : `MediaInfoViewer.tsx`, `Finalize.tsx`
 
 ### API Backend - Endpoints Disponibles
 

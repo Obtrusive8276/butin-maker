@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { ArrowRight, ArrowLeft, Loader2, Copy, Check, RefreshCw, Link2 } from 'lucide-react';
 import { tmdbApi, mediainfoApi } from '../services/api';
 import { useAppStore } from '../stores/appStore';
+import { useClipboard } from '../hooks/useClipboard';
 
 export default function RenameEditor() {
   const { 
@@ -19,7 +20,7 @@ export default function RenameEditor() {
     settings
   } = useAppStore();
   
-  const [copied, setCopied] = useState(false);
+  const { copy: copyReleaseName, copied } = useClipboard();
   const [source, setSource] = useState('');
   const [edition, setEdition] = useState('');
   const [info, setInfo] = useState('');
@@ -103,25 +104,8 @@ export default function RenameEditor() {
     }
   }, [selectedItem, mediaInfo, tmdbInfo, hasGenerated]);
 
-  const handleCopy = async () => {
-    if (!releaseName || releaseName.trim() === '') {
-      console.error('Pas de nom de release à copier');
-      return;
-    }
-    
-    try {
-      await navigator.clipboard.writeText(releaseName);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('Erreur lors de la copie:', error);
-      // Fallback: sélectionner le texte dans l'input
-      const input = document.querySelector('input[type="text"]');
-      if (input instanceof HTMLInputElement) {
-        input.select();
-        input.setSelectionRange(0, 99999);
-      }
-    }
+  const handleCopy = () => {
+    copyReleaseName(releaseName);
   };
 
   const handleReleaseNameChange = (newName: string) => {

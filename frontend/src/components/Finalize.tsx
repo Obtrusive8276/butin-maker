@@ -3,6 +3,8 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Download, Copy, Check, ExternalLink, FileText, File, Tags, Eye, X, Play, Loader2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { torrentApi, mediainfoApi, tagsApi, presentationApi } from '../services/api';
+import { useClipboard } from '../hooks/useClipboard';
+import { getResolutionFromWidth } from '../utils/format';
 import type { Caracteristique } from '../types';
 
 export default function Finalize() {
@@ -23,7 +25,7 @@ export default function Finalize() {
     tmdbInfo
   } = useAppStore();
   
-  const [copiedBBCode, setCopiedBBCode] = useState(false);
+  const { copy: copyBBCode, copied: copiedBBCode } = useClipboard();
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
   const [showNfoPreview, setShowNfoPreview] = useState(false);
   const [showBBCodePreview, setShowBBCodePreview] = useState(false);
@@ -105,16 +107,7 @@ export default function Finalize() {
     },
   });
 
-  // Normaliser la résolution vers une valeur standard (basé sur la largeur)
-  const normalizeResolution = (width: number | null | undefined): string => {
-    if (!width) return '';
-    if (width >= 3840) return '2160p';
-    if (width >= 1920) return '1080p';
-    if (width >= 1280) return '720p';
-    if (width >= 1024) return '576p';
-    if (width >= 720) return '480p';
-    return '480p';
-  };
+
 
   // Générer automatiquement la présentation si elle n'existe pas
   useEffect(() => {
@@ -126,7 +119,7 @@ export default function Finalize() {
         rating: tmdbInfo.vote_average.toString(),
         genre: tmdbInfo.genres,
         synopsis: tmdbInfo.overview,
-        quality: normalizeResolution(mediaInfo?.video_tracks?.[0]?.width),
+        quality: getResolutionFromWidth(mediaInfo?.video_tracks?.[0]?.width),
         format: mediaInfo?.container || '',
         video_codec: mediaInfo?.video_tracks?.[0]?.codec || '',
         audio_codec: mediaInfo?.audio_tracks?.[0]?.codec || '',
@@ -310,25 +303,8 @@ export default function Finalize() {
     }
   };
 
-  const handleCopyBBCode = async () => {
-    if (!generatedBBCode || generatedBBCode.trim() === '') {
-      console.error('Pas de BBCode à copier');
-      return;
-    }
-    
-    try {
-      await navigator.clipboard.writeText(generatedBBCode);
-      setCopiedBBCode(true);
-      setTimeout(() => setCopiedBBCode(false), 2000);
-    } catch (error) {
-      console.error('Erreur lors de la copie:', error);
-      // Fallback: sélectionner le texte pour copie manuelle
-      const textarea = document.querySelector('textarea');
-      if (textarea) {
-        textarea.select();
-        textarea.setSelectionRange(0, 99999);
-      }
-    }
+  const handleCopyBBCode = () => {
+    copyBBCode(generatedBBCode);
   };
 
   const handleGoToUpload = () => {

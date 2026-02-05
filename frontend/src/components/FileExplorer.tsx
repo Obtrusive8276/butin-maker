@@ -121,6 +121,23 @@ export default function FileExplorer() {
     }
   };
 
+  // Raccourci clavier: Backspace pour remonter au dossier parent
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Backspace ou Delete pour remonter
+      if ((e.key === 'Backspace' || e.key === 'Delete') && directory?.parent_path) {
+        // Éviter de capturer Backspace quand on est dans un input
+        if (document.activeElement?.tagName !== 'INPUT') {
+          e.preventDefault();
+          goToParent();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [directory?.parent_path]);
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
@@ -188,9 +205,11 @@ export default function FileExplorer() {
         <button
           onClick={goToParent}
           disabled={!directory?.parent_path}
-          className="p-1.5 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors"
+          title="Remonter au dossier parent (touche Backspace ou Delete)"
         >
           <ChevronUp className="w-4 h-4" />
+          <span>Dossier parent</span>
         </button>
         <span className="text-sm text-gray-400 truncate flex-1">{currentPath}</span>
         <button

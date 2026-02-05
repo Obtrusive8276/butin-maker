@@ -1,0 +1,33 @@
+# Butin Maker 🏴‍☠️
+# GitHub: https://github.com/Obtrusive8276/butin-maker
+
+services:
+  backend:
+    image: ghcr.io/obtrusive8276/butin-maker-backend:latest
+    container_name: la-soute
+    restart: unless-stopped
+    volumes:
+      - ./config:/config
+      - ./output:/app/output
+      - ./tags_data.json:/app/data/tags_data.json:ro
+      # Montez votre dossier de médias ici
+      - /path/to/your/media:/data:ro
+    ports:
+      - "8000:8000"
+    networks:
+      - butin-network
+
+  frontend:
+    image: ghcr.io/obtrusive8276/butin-maker-frontend:latest
+    container_name: le-pont
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - butin-network
+
+networks:
+  butin-network:
+    driver: bridge

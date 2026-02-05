@@ -1,0 +1,41 @@
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite / Build
+dist
+dist-ssr
+*.local
+
+# Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Testing
+coverage
+*.test.ts
+*.test.tsx
+
+# Logs
+logs
+*.log
+
+# Cache
+.eslintcache
+.stylelintcache

@@ -63,6 +63,19 @@ class TestNamingService:
         assert "GROUP" not in result
         assert "-" not in result or result.count("-") == 0
     
+    def test_extract_title_with_parentheses(self):
+        """Test extraction avec année entre parenthèses (format: Title (YYYY))"""
+        result = self.service.extract_movie_title_from_filename("The Onion Movie (2008).mkv")
+        assert result == "The.Onion.Movie", f"Attendu: 'The.Onion.Movie', Obtenu: '{result}'"
+        assert "2008" not in result
+        assert "(" not in result
+        assert ")" not in result
+    
+    def test_extract_title_with_parentheses_no_extension(self):
+        """Test extraction avec parenthèses sans extension"""
+        result = self.service.extract_movie_title_from_filename("The Onion Movie (2008)")
+        assert result == "The.Onion.Movie", f"Attendu: 'The.Onion.Movie', Obtenu: '{result}'"
+    
     def test_extract_title_multi_word(self):
         """Test extraction titre multi-mots (Le Seigneur des Anneaux)"""
         result = self.service.extract_movie_title_from_filename(

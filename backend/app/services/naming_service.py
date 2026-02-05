@@ -177,6 +177,18 @@ class NamingService:
             if title:
                 return title
         
+        # Stratégie 1b: Chercher l'année avec parenthèses (format (YYYY)) et couper avant
+        year_match = re.search(r'\s*\((19|20)\d{2}\)', name)
+        if year_match:
+            # Prendre tout ce qui est avant l'année
+            title = name[:year_match.start()]
+            # Nettoyer les espaces et remplacer par des points
+            title = title.strip()
+            # Remplacer les espaces par des points pour la cohérence
+            title = title.replace(' ', '.')
+            if title:
+                return title
+        
         # Stratégie 2: Chercher l'année à la fin (.YYYY)
         year_match = re.search(r'\.((19|20)\d{2})$', name)
         if year_match:

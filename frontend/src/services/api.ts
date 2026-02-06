@@ -6,7 +6,10 @@ import type {
   TorrentResponse,
   MediaInfo,
   PresentationData,
-  TagsData
+  TagsData,
+  LaCaleMetaResponse,
+  LaCaleUploadRequest,
+  LaCaleUploadResponse
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -296,6 +299,23 @@ export const tmdbApi = {
   }> => {
     const params = new URLSearchParams({ filename, type });
     const response = await api.get(`/tmdb/search-from-filename?${params}`);
+    return response.data;
+  },
+};
+
+export const lacaleApi = {
+  getMeta: async (): Promise<LaCaleMetaResponse> => {
+    const response = await api.get<LaCaleMetaResponse>('/lacale/meta');
+    return response.data;
+  },
+
+  getCategoryId: async (type: 'movie' | 'tv'): Promise<{ category_id: string }> => {
+    const response = await api.get<{ category_id: string }>(`/lacale/category?type=${type}`);
+    return response.data;
+  },
+
+  upload: async (data: LaCaleUploadRequest): Promise<LaCaleUploadResponse> => {
+    const response = await api.post<LaCaleUploadResponse>('/lacale/upload', data);
     return response.data;
   },
 };

@@ -857,3 +857,626 @@ Utilisée dans : `MediaInfoViewer.tsx`, `Finalize.tsx`
 - ✅ Fonction `renameFile` supprimée (12 lignes)
 - ✅ Code nettoyé et maintenu
 
+## Étape 2 - Upload Automatique vers La Cale 🏴‍☠️
+
+### 🎯 Vue d'ensemble
+
+Implémentation complète de l'upload automatique vers le tracker La Cale via son API REST. Cette fonctionnalité permettra d'uploader directement depuis l'application sans passer par l'interface web du tracker.
+
+**Méthodologie** : TDD strict - Tous les tests écrits AVANT l'implémentation  
+**Branche** : `beta` (isolée de `main` jusqu'à validation complète)  
+**Exigence** : 100% des tests doivent passer avant merge  
+**Règle Git** : Ne jamais commit/push sans demande explicite de l'utilisateur
+
+---
+
+### 📦 Dépendances
+
+**Backend** : Aucune dépendance supplémentaire (httpx et aiofiles déjà présents)  
+**Frontend** : Aucune dépendance supplémentaire (axios et @tanstack/react-query déjà présents)
+
+---
+
+### 🗂️ Structure des fichiers
+
+#### Backend - Nouveaux fichiers ✨
+
+```
+backend/
+├── app/
+│   ├── services/
+│   │   └── lacale_service.py          # Service API La Cale
+│   ├── routers/
+│   │   └── lacale.py                  # Endpoints La Cale
+│   └── models/
+│       └── lacale.py                  # Modèles Pydantic
+└── tests/
+    ├── test_lacale_service.py         # Tests service (25 tests)
+    └── test_lacale_router.py          # Tests router (12 tests)
+```
+
+#### Backend - Fichiers modifiés 🔧
+
+```
+backend/
+├── app/
+│   ├── config.py                      # +1 ligne (lacale_api_key)
+│   ├── main.py                        # +2 lignes (import + register router)
+│   └── services/
+│       └── qbittorrent_service.py     # +1 ligne (source=lacale)
+└── tests/
+    ├── test_config.py                 # +3 tests
+    └── test_qbittorrent_service.py    # +4 tests
+```
+
+#### Frontend - Fichiers modifiés 🔧
+
+```
+frontend/src/
+├── types/index.ts                     # +50 lignes (types La Cale)
+├── services/api.ts                    # +20 lignes (lacaleApi)
+├── stores/appStore.ts                 # +10 lignes (état upload)
+├── components/
+│   ├── SettingsModal.tsx              # +15 lignes (champ API key)
+│   └── Finalize.tsx                   # +150 lignes (upload auto)
+```
+
+---
+
+### 🧪 PHASE 1 : TESTS (TDD)
+
+#### 1.1 - Tests Backend Config (`test_config.py`)
+
+**Ajouts** : 3 tests supplémentaires
+
+```python
+def test_user_settings_defaults_include_lacale_api_key():
+    """Vérifie que DEFAULTS contient tracker.lacale_api_key"""
+    assert "tracker" in UserSettings.DEFAULTS
+    assert "lacale_api_key" in UserSettings.DEFAULTS["tracker"]
+    assert UserSettings.DEFAULTS["tracker"]["lacale_api_key"] == ""
+
+def test_user_settings_get_returns_lacale_api_key():
+    """Vérifie que get() retourne lacale_api_key même si absent du JSON"""
+    us = UserSettings()
+    us._data = {"tracker": {"announce_url": "http://test"}}
+    result = us.get()
+    assert "lacale_api_key" in result["tracker"]
+    assert result["tracker"]["lacale_api_key"] == ""
+
+def test_user_settings_save_lacale_api_key():
+    """Vérifie que l'API key est bien sauvegardée"""
+    us = UserSettings()
+    data = us.get()
+    data["tracker"]["lacale_api_key"] = "test_api_key_123"
+    us.save(data)
+    us2 = UserSettings()
+    result = us2.get()
+    assert result["tracker"]["lacale_api_key"] == "test_api_key_123"
+```
+
+**Temps estimé** : 30 min
+
+---
+
+#### 1.2 - Tests Backend qBittorrent (`test_qbittorrent_service.py`)
+
+**Ajouts** : 4 tests supplémentaires
+
+```python
+@pytest.mark.asyncio
+async def test_create_torrent_adds_source_flag_lacale():
+    """Vérifie que create_torrent ajoute automatiquement source=lacale"""
+    service = QBittorrentService()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "test.mkv"
+        test_file.write_bytes(b"fake video content")
+        success, result = await service.create_torrent(str(test_file))
+        assert success
+        t = torf.Torrent.read(result["torrent_path"])
+        assert t.source == "lacale"
+
+@pytest.mark.asyncio
+async def test_create_torrent_source_flag_case_sensitive():
+    """Vérifie que le flag source est exactement 'lacale' (minuscules)"""
+    # Test que source == "lacale" et non "LaCale" ou "LACALE"
+
+@pytest.mark.asyncio
+async def test_create_torrent_preserves_existing_params():
+    """Vérifie que source=lacale ne casse pas les autres paramètres"""
+    # Test private, piece_size, tracker_url préservés
+
+@pytest.mark.asyncio
+async def test_create_torrent_source_flag_with_directory():
+    """Vérifie que source=lacale fonctionne aussi pour les dossiers"""
+```
+
+**Temps estimé** : 1h
+
+---
+
+#### 1.3 - Tests Backend Service La Cale (`test_lacale_service.py`)
+
+**Nouveaux tests** : 25 tests complets
+
+**Catégories** :
+- Configuration (3 tests) : init avec/sans API key, custom base URL
+- Headers (2 tests) : avec/sans API key
+- Fetch Meta (6 tests) : succès, 401, 403, 500, timeout, parsing
+- Find Category (3 tests) : movie, tv, not found
+- Upload (11 tests) : succès, 409, 429, fichier manquant, multipart, etc.
+
+**Temps estimé** : 3h
+
+---
+
+#### 1.4 - Tests Backend Router (`test_lacale_router.py`)
+
+**Nouveaux tests** : 12 tests
+
+**Endpoints testés** :
+- `GET /lacale/meta` (3 tests) : succès, sans API key, API key invalide
+- `GET /lacale/category` (3 tests) : movie, tv, type invalide
+- `POST /lacale/upload` (6 tests) : succès, champs manquants, 409, 429
+
+**Temps estimé** : 2h
+
+---
+
+#### 📊 Récapitulatif Tests Phase 1
+
+| Fichier | Tests existants | Tests à ajouter | Total | Temps |
+|---------|----------------|-----------------|-------|-------|
+| `test_config.py` | ~15 | +3 | ~18 | 30 min |
+| `test_qbittorrent_service.py` | ~20 | +4 | ~24 | 1h |
+| `test_lacale_service.py` | 0 | +25 | 25 | 3h |
+| `test_lacale_router.py` | 0 | +12 | 12 | 2h |
+| **TOTAL** | **~35** | **+44** | **~79** | **6h 30min** |
+
+---
+
+### 🚀 PHASE 2 : IMPLÉMENTATION
+
+#### 2.1 - Backend Config
+
+**Fichier** : `backend/app/config.py` (ligne 72-76)
+
+```python
+"tracker": {
+    "announce_url": "",
+    "upload_url": "https://la-cale.space/upload",
+    "lacale_api_key": ""  # ← AJOUTER
+},
+```
+
+**Tests validés** : 3 nouveaux tests  
+**Temps estimé** : 15 min
+
+---
+
+#### 2.2 - Backend qBittorrent Service
+
+**Fichier** : `backend/app/services/qbittorrent_service.py` (ligne 82)
+
+```python
+t = torf.Torrent(path=source_path)
+t.name = content_name
+t.private = private
+t.source = "lacale"  # ← AJOUTER (Important pour éviter re-téléchargement)
+```
+
+**Tests validés** : 4 nouveaux tests  
+**Temps estimé** : 20 min
+
+---
+
+#### 2.3 - Backend Modèles Pydantic
+
+**Fichier** : `backend/app/models/lacale.py` ✨ NOUVEAU
+
+**Contenu** :
+- `LaCaleTag` : id, name, slug
+- `LaCaleTagGroup` : id, name, slug, order, tags[]
+- `LaCaleCategory` : id, name, slug, icon, parentId, children[]
+- `LaCaleMetaResponse` : categories[], tagGroups[], ungroupedTags[]
+- `LaCaleUploadRequest` : title, category_id, torrent_file_path, tag_ids[], description, tmdb_id, tmdb_type, cover_url, nfo_file_path
+- `LaCaleUploadResponse` : success, id, slug, link, error
+
+**Temps estimé** : 30 min
+
+---
+
+#### 2.4 - Backend Service La Cale
+
+**Fichier** : `backend/app/services/lacale_service.py` ✨ NOUVEAU (~250 lignes)
+
+**Méthodes principales** :
+- `__init__(api_key, base_url)` : Initialisation avec API key depuis settings
+- `_get_headers()` : Construit headers avec `X-Api-Key`
+- `fetch_meta()` : GET /api/external/meta → LaCaleMetaResponse
+- `find_category_id(content_type)` : Trouve "cat_films" ou "cat_series"
+- `upload(request)` : POST /api/external/upload (multipart/form-data)
+
+**Gestion erreurs** :
+- 401 Unauthorized : API key invalide
+- 403 Forbidden : API key révoquée
+- 409 Conflict : Torrent déjà existant
+- 429 Rate Limit : 30 req/min dépassé (message clair)
+- 500 Server Error : Erreur serveur
+
+**Tests validés** : 25 tests  
+**Temps estimé** : 2h
+
+---
+
+#### 2.5 - Backend Router La Cale
+
+**Fichier** : `backend/app/routers/lacale.py` ✨ NOUVEAU (~120 lignes)
+
+**Endpoints** :
+- `GET /lacale/meta` : Récupère catégories + tags
+- `GET /lacale/category?type=movie|tv` : Retourne category_id
+- `POST /lacale/upload` : Upload torrent (body: LaCaleUploadRequest)
+
+**Tests validés** : 12 tests  
+**Temps estimé** : 1h
+
+---
+
+#### 2.6 - Backend Main
+
+**Fichier** : `backend/app/main.py`
+
+```python
+# Ligne ~15 - Ajouter import
+from .routers import files, torrent, mediainfo, tmdb, presentation, tags, settings, lacale
+
+# Ligne ~30 - Enregistrer router
+app.include_router(lacale.router, prefix="/api")
+```
+
+**Temps estimé** : 5 min
+
+---
+
+#### 2.7 - Frontend Types
+
+**Fichier** : `frontend/src/types/index.ts` (après ligne 43)
+
+**Ajouts** :
+- `LaCaleTag`, `LaCaleTagGroup`, `LaCaleCategory`
+- `LaCaleMetaResponse`, `LaCaleUploadRequest`, `LaCaleUploadResponse`
+- Modification `TrackerSettings` : ajouter `lacale_api_key: string`
+
+**Temps estimé** : 15 min
+
+---
+
+#### 2.8 - Frontend API Client
+
+**Fichier** : `frontend/src/services/api.ts` (après ligne ~180)
+
+```typescript
+export const lacaleApi = {
+  getMeta: async (): Promise<LaCaleMetaResponse> => { ... },
+  getCategoryId: async (type: 'movie' | 'tv'): Promise<string> => { ... },
+  upload: async (request: LaCaleUploadRequest): Promise<LaCaleUploadResponse> => { ... },
+};
+```
+
+**Temps estimé** : 20 min
+
+---
+
+#### 2.9 - Frontend Store
+
+**Fichier** : `frontend/src/stores/appStore.ts`
+
+**Ajouts** :
+- `uploadStatus: 'idle' | 'loading' | 'success' | 'error'`
+- `uploadResult: LaCaleUploadResponse | null`
+- `uploadError: string | null`
+- Setters associés
+
+**Temps estimé** : 15 min
+
+---
+
+#### 2.10 - Frontend Settings Modal
+
+**Fichier** : `frontend/src/components/SettingsModal.tsx` (après upload_url)
+
+```tsx
+<div>
+  <label className="block text-sm font-medium text-gray-300 mb-2">
+    Clé API La Cale
+  </label>
+  <input
+    type="password"
+    value={formData.tracker.lacale_api_key}
+    onChange={(e) => setFormData({
+      ...formData,
+      tracker: { ...formData.tracker, lacale_api_key: e.target.value }
+    })}
+    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+    placeholder="Votre clé API La Cale"
+  />
+  <p className="mt-1 text-sm text-gray-400">
+    Générez votre clé API dans les paramètres de votre compte La Cale.
+  </p>
+</div>
+```
+
+**Temps estimé** : 20 min
+
+---
+
+#### 2.11 - Frontend Finalize (Upload Auto)
+
+**Fichier** : `frontend/src/components/Finalize.tsx` (+150 lignes)
+
+**Modifications principales** :
+1. Import `lacaleApi` et types
+2. États : `uploadStatus`, `uploadError`, `uploadLink`
+3. Mutation `uploadMutation` avec TanStack Query :
+   - Auto-détection `categoryId` via `lacaleApi.getCategoryId(contentType)`
+   - Construction `LaCaleUploadRequest` avec tous les champs
+   - Gestion `onSuccess` / `onError`
+4. UI Upload :
+   - Bouton "Upload automatique" (idle)
+   - Spinner + texte (loading)
+   - Lien vers torrent + badge succès (success)
+   - Message erreur + bouton réessayer (error)
+   - Warning si API key manquante
+5. Fallback : Bouton "Upload manuel" (ancien comportement)
+
+**Messages d'erreur spécifiques** :
+- 401 : "API key invalide"
+- 409 : "Torrent déjà existant"
+- 429 : "Limite 30 req/min dépassée. Veuillez patienter."
+
+**Temps estimé** : 2h
+
+---
+
+#### 📊 Récapitulatif Implémentation Phase 2
+
+| Fichier | Type | Temps |
+|---------|------|-------|
+| `config.py` | Modification | 15 min |
+| `qbittorrent_service.py` | Modification | 20 min |
+| `models/lacale.py` | Nouveau | 30 min |
+| `services/lacale_service.py` | Nouveau | 2h |
+| `routers/lacale.py` | Nouveau | 1h |
+| `main.py` | Modification | 5 min |
+| `types/index.ts` | Modification | 15 min |
+| `api.ts` | Modification | 20 min |
+| `appStore.ts` | Modification | 15 min |
+| `SettingsModal.tsx` | Modification | 20 min |
+| `Finalize.tsx` | Modification | 2h |
+| **TOTAL** | | **~7h** |
+
+---
+
+### ✅ PHASE 3 : VALIDATION
+
+#### 3.1 - Tests automatisés
+
+```bash
+# Backend - Tous les tests
+pytest tests/ -v --cov=app --cov-report=term-missing
+
+# Tests spécifiques La Cale
+pytest tests/test_lacale_service.py -v
+pytest tests/test_lacale_router.py -v
+
+# Vérifier couverture 100%
+pytest tests/test_lacale_service.py --cov=app.services.lacale_service --cov-report=term-missing
+```
+
+**Critère** : 100% des tests passent (79 tests total)  
+**Temps estimé** : 1h (debug + corrections)
+
+---
+
+#### 3.2 - Tests manuels Docker
+
+```bash
+# Build images beta
+docker build -t la-cale-backend:beta ./backend
+docker build -t la-cale-frontend:beta ./frontend
+
+# Run conteneurs beta
+docker run -d --name backend-beta --network lacale-network -p 8001:8000 \
+  -v "C:/Users/Nicolas/Downloads:/data:ro" \
+  -v "C:/Users/Nicolas/Desktop/lacale-config:/config" \
+  -v "C:/Users/Nicolas/Desktop/lacale-output:/app/output" \
+  la-cale-backend:beta
+
+docker run -d --name frontend-beta --network lacale-network -p 3001:80 \
+  la-cale-frontend:beta
+
+# Accès: http://localhost:3001
+```
+
+**Scénarios à tester** :
+1. ✅ Configurer API key dans Settings
+2. ✅ Workflow complet : Files → TMDB → Rename → Torrent → Upload
+3. ✅ Vérifier `source=lacale` dans .torrent créé
+4. ✅ Upload film réussi (lien retourné)
+5. ✅ Upload série réussie (lien retourné)
+6. ✅ Erreur API key manquante (message clair)
+7. ✅ Erreur API key invalide (401)
+
+**Temps estimé** : 2h
+
+---
+
+### 🌳 PHASE 4 : GIT & BRANCHING
+
+#### 4.1 - Création branche beta
+
+```bash
+git checkout main
+git pull origin main
+git checkout -b beta
+```
+
+---
+
+#### 4.2 - Structure des commits
+
+**Ordre recommandé** (8 commits) :
+
+1. **Tests config + qbittorrent** (7 tests)
+   ```
+   test: Ajout tests TDD pour API key La Cale et source flag
+   ```
+
+2. **Tests service + router** (37 tests)
+   ```
+   test: Ajout tests TDD service et router La Cale (37 tests)
+   ```
+
+3. **Backend config + qbittorrent**
+   ```
+   feat: Ajout lacale_api_key dans settings + source flag
+   ```
+
+4. **Backend modèles + service**
+   ```
+   feat: Implémentation service API La Cale
+   ```
+
+5. **Backend router + main**
+   ```
+   feat: Ajout endpoints API La Cale
+   ```
+
+6. **Frontend types + API**
+   ```
+   feat: Types et client API La Cale (frontend)
+   ```
+
+7. **Frontend store + settings**
+   ```
+   feat: État upload et configuration API key (frontend)
+   ```
+
+8. **Frontend Finalize**
+   ```
+   feat: Implémentation upload automatique vers La Cale
+   ```
+
+9. **Documentation**
+   ```
+   docs: Plan détaillé implémentation upload auto La Cale
+   ```
+
+**⚠️ IMPORTANT** : Ne jamais commit/push sans demande explicite de l'utilisateur !
+
+---
+
+#### 4.3 - Pull Request (draft)
+
+```bash
+gh pr create --base main --head beta \
+  --title "feat: Upload automatique vers La Cale (API)" \
+  --draft
+```
+
+**Contenu PR** :
+- Checklist : Tests, implémentation, validation
+- Instructions tests Docker
+- Liste fichiers modifiés
+- ⚠️ Mode DRAFT jusqu'à validation utilisateur
+
+**Temps estimé** : 1h
+
+---
+
+### 📈 ESTIMATION TOTALE
+
+| Phase | Description | Temps |
+|-------|-------------|-------|
+| Phase 1 | Tests TDD (44 tests) | 6h 30min |
+| Phase 2 | Implémentation | 7h |
+| Phase 3 | Validation | 3h |
+| Phase 4 | Git + PR | 1h |
+| **TOTAL** | | **~17h 30min** |
+
+**Répartition recommandée** :
+- Jour 1 (4h) : Tests TDD (config, qbittorrent, début lacale_service)
+- Jour 2 (4h) : Tests TDD (fin lacale_service, lacale_router)
+- Jour 3 (4h) : Implémentation backend
+- Jour 4 (3h) : Implémentation frontend
+- Jour 5 (2h 30min) : Validation + Git
+
+---
+
+### 🎯 CRITÈRES DE SUCCÈS
+
+#### Tests automatisés
+- ✅ 100% des tests backend passent (79 tests)
+- ✅ Couverture ≥ 90% sur `lacale_service.py` et `lacale.py`
+- ✅ Source flag `lacale` présent dans tous les torrents
+
+#### Tests manuels
+- ✅ Upload film/série réussi avec lien
+- ✅ Gestion erreurs : API key manquante, 401, 409, 429
+- ✅ Messages clairs et actionnables
+
+#### Expérience utilisateur
+- ✅ Workflow fluide sans friction
+- ✅ Fallback upload manuel si problème
+- ✅ API key sécurisée (type password)
+
+---
+
+### 🚨 POINTS D'ATTENTION
+
+#### Sécurité
+- ⚠️ **API key** : Stockée en clair dans `settings.json` (local uniquement)
+- ⚠️ **Path traversal** : Vérifier chemins `torrent_file_path` et `nfo_file_path`
+- ⚠️ **Rate limiting** : Message clair, pas de retry auto
+
+#### Performance
+- ⚠️ **Timeout** : 30s par défaut (configurable)
+- ⚠️ **Multipart** : Upload peut être lent pour gros fichiers
+
+#### Compatibilité
+- ⚠️ **API La Cale** : Dépendance externe - si API change, adapter modèles
+- ⚠️ **Tags** : Structure différente de `tags_data.json`
+
+---
+
+### 📚 RESSOURCES
+
+- **API La Cale** : `LA_CALE_API.md`
+- **Exemple upload** : Node.js (ligne 173-201)
+- **Endpoint meta** : GET /api/external/meta (ligne 71-83)
+- **Endpoint upload** : POST /api/external/upload (ligne 92-131)
+
+---
+
+### ❓ QUESTIONS OUVERTES
+
+1. **Tags dynamiques** : Supprimer `tags_data.json` après migration API ?
+2. **Cache meta** : Mettre en cache `/api/external/meta` frontend ?
+3. **Multi-upload** : Gérer file d'attente pour batch uploads ?
+
+---
+
+### 📝 CLARIFICATIONS RÉSOLUES
+
+| Question | Réponse |
+|----------|---------|
+| Source flag torrent ? | ✅ Oui, ajouter `t.source = "lacale"` automatiquement |
+| Gestion tags ? | ✅ Option A - Récupérer dynamiquement via `/meta` (films vs séries) |
+| API key vs passkey ? | ✅ Une seule API key (header `X-Api-Key`) - passkey obsolète |
+| Détection catégorie ? | ✅ Auto selon `contentType` (movie→Films, tv→Séries) |
+| Position bouton upload ? | ✅ Option A - Dans `Finalize.tsx` existant |
+| Gestion rate limit ? | ✅ Afficher erreur claire, pas de retry auto |
+| Niveau tests ? | ✅ Maximum de tests TDD, 100% doivent passer |
+| Stockage API key ? | ✅ Option A - `tracker.lacale_api_key` |
+| Branche beta ? | ✅ Tout sur beta, merge main après validation utilisateur |

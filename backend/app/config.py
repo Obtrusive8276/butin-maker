@@ -71,7 +71,8 @@ class UserSettings:
         },
         "tracker": {
             "announce_url": "",
-            "upload_url": "https://la-cale.space/upload"
+            "upload_url": "https://la-cale.space/upload",
+            "lacale_api_key": ""
         },
         "paths": {
             "default_browse_path": "",

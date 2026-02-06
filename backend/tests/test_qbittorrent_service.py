@@ -208,6 +208,174 @@ class TestQBittorrentServiceTorrent:
                 assert FakeTorrent.last_instance.name == "The.Onion.Movie.2008.mkv"
 
 
+class TestQBittorrentServiceSourceFlag:
+    """Tests pour le source flag 'lacale' dans les torrents créés"""
+    
+    def setup_method(self):
+        self.service = QBittorrentService()
+    
+    @pytest.mark.asyncio
+    async def test_create_torrent_adds_source_flag_lacale(self, tmp_path):
+        """Vérifie que create_torrent ajoute automatiquement source=lacale"""
+        source_file = tmp_path / "test.mkv"
+        source_file.write_text("fake video content")
+        
+        class FakeTorrent:
+            last_instance = None
+            
+            def __init__(self, path):
+                self.path = path
+                self.name = None
+                self.private = None
+                self.source = None
+                self.piece_size = None
+                self.trackers = None
+                self.infohash = "abc123"
+                self.size = 100
+                self.pieces = 1
+                FakeTorrent.last_instance = self
+            
+            def generate(self):
+                return None
+            
+            def write(self, output_file, overwrite=True):
+                return None
+        
+        with patch('app.services.qbittorrent_service.torf.Torrent', new=FakeTorrent):
+            with patch('app.services.qbittorrent_service.settings') as mock_settings:
+                mock_settings.output_path = tmp_path
+                
+                success, result = await self.service.create_torrent(str(source_file))
+                
+                assert success is True
+                assert FakeTorrent.last_instance is not None
+                assert FakeTorrent.last_instance.source == "lacale"
+    
+    @pytest.mark.asyncio
+    async def test_create_torrent_source_flag_case_sensitive(self, tmp_path):
+        """Vérifie que le flag source est exactement 'lacale' (minuscules)"""
+        source_file = tmp_path / "test.mkv"
+        source_file.write_text("fake")
+        
+        class FakeTorrent:
+            last_instance = None
+            
+            def __init__(self, path):
+                self.path = path
+                self.name = None
+                self.private = None
+                self.source = None
+                self.piece_size = None
+                self.trackers = None
+                self.infohash = "abc123"
+                self.size = 100
+                self.pieces = 1
+                FakeTorrent.last_instance = self
+            
+            def generate(self):
+                return None
+            
+            def write(self, output_file, overwrite=True):
+                return None
+        
+        with patch('app.services.qbittorrent_service.torf.Torrent', new=FakeTorrent):
+            with patch('app.services.qbittorrent_service.settings') as mock_settings:
+                mock_settings.output_path = tmp_path
+                
+                await self.service.create_torrent(str(source_file))
+                
+                # Doit être exactement "lacale", pas "LaCale" ou "LACALE"
+                assert FakeTorrent.last_instance.source == "lacale"
+                assert FakeTorrent.last_instance.source != "LaCale"
+                assert FakeTorrent.last_instance.source != "LACALE"
+    
+    @pytest.mark.asyncio
+    async def test_create_torrent_source_preserves_existing_params(self, tmp_path):
+        """Vérifie que source=lacale ne casse pas les autres paramètres"""
+        source_file = tmp_path / "test.mkv"
+        source_file.write_text("fake content")
+        
+        class FakeTorrent:
+            last_instance = None
+            
+            def __init__(self, path):
+                self.path = path
+                self.name = None
+                self.private = None
+                self.source = None
+                self.piece_size = None
+                self.trackers = None
+                self.infohash = "abc123"
+                self.size = 100
+                self.pieces = 1
+                FakeTorrent.last_instance = self
+            
+            def generate(self):
+                return None
+            
+            def write(self, output_file, overwrite=True):
+                return None
+        
+        with patch('app.services.qbittorrent_service.torf.Torrent', new=FakeTorrent):
+            with patch('app.services.qbittorrent_service.settings') as mock_settings:
+                mock_settings.output_path = tmp_path
+                
+                success, result = await self.service.create_torrent(
+                    source_path=str(source_file),
+                    name="Custom.Name",
+                    piece_size=256 * 1024,
+                    private=True,
+                    tracker_url="https://tracker.example/announce"
+                )
+                
+                assert success is True
+                ft = FakeTorrent.last_instance
+                
+                # Vérifier que TOUT est préservé
+                assert ft.source == "lacale"
+                assert ft.private is True
+                assert ft.piece_size == 256 * 1024
+                assert ft.trackers == [["https://tracker.example/announce"]]
+    
+    @pytest.mark.asyncio
+    async def test_create_torrent_source_flag_with_directory(self, tmp_path):
+        """Vérifie que source=lacale fonctionne aussi pour les dossiers"""
+        season_dir = tmp_path / "Season.1"
+        season_dir.mkdir()
+        (season_dir / "episode1.mkv").write_text("ep1")
+        (season_dir / "episode2.mkv").write_text("ep2")
+        
+        class FakeTorrent:
+            last_instance = None
+            
+            def __init__(self, path):
+                self.path = path
+                self.name = None
+                self.private = None
+                self.source = None
+                self.piece_size = None
+                self.trackers = None
+                self.infohash = "abc123"
+                self.size = 200
+                self.pieces = 2
+                FakeTorrent.last_instance = self
+            
+            def generate(self):
+                return None
+            
+            def write(self, output_file, overwrite=True):
+                return None
+        
+        with patch('app.services.qbittorrent_service.torf.Torrent', new=FakeTorrent):
+            with patch('app.services.qbittorrent_service.settings') as mock_settings:
+                mock_settings.output_path = tmp_path
+                
+                success, result = await self.service.create_torrent(str(season_dir))
+                
+                assert success is True
+                assert FakeTorrent.last_instance.source == "lacale"
+
+
 class TestQBittorrentServiceSeeding:
     """Tests pour l'ajout de torrents pour seeding"""
     

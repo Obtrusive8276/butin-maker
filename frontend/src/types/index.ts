@@ -22,6 +22,7 @@ export interface QBittorrentSettings {
 export interface TrackerSettings {
   announce_url: string;
   upload_url: string;
+  lacale_api_key: string;
 }
 
 export interface PathSettings {
@@ -141,3 +142,53 @@ export interface TagsData {
 }
 
 export type Step = 'files' | 'tmdb' | 'nfo' | 'rename' | 'torrent' | 'finalize';
+
+// La Cale API types
+export interface LaCaleTag {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface LaCaleTagGroup {
+  id: string;
+  name: string;
+  slug: string;
+  order?: number;
+  tags: LaCaleTag[];
+}
+
+export interface LaCaleCategory {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string;
+  parentId?: string;
+  children: LaCaleCategory[];
+}
+
+export interface LaCaleMetaResponse {
+  categories: LaCaleCategory[];
+  tagGroups: LaCaleTagGroup[];
+  ungroupedTags: LaCaleTag[];
+}
+
+export interface LaCaleUploadRequest {
+  title: string;
+  category_id: string;
+  torrent_file_path: string;
+  tag_ids?: string[];
+  description?: string;
+  tmdb_id?: string;
+  tmdb_type?: string;
+  cover_url?: string;
+  nfo_file_path?: string;
+}
+
+export interface LaCaleUploadResponse {
+  success: boolean;
+  id?: string;
+  slug?: string;
+  link?: string;
+  error?: string;
+}

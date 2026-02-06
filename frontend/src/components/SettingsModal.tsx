@@ -18,7 +18,8 @@ export default function SettingsModal() {
     },
     tracker: {
       announce_url: '',
-      upload_url: ''
+      upload_url: '',
+      lacale_api_key: ''
     },
     paths: {
       default_browse_path: '',
@@ -201,6 +202,22 @@ export default function SettingsModal() {
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Page d'upload sur laquelle vous serez redirigé à la fin
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Clé API La Cale</label>
+                <input
+                  type="password"
+                  value={formData.tracker.lacale_api_key}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    tracker: { ...formData.tracker, lacale_api_key: e.target.value }
+                  })}
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                  placeholder="Votre clé API La Cale"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Générez votre clé API dans les paramètres de votre compte La Cale (pour l'upload automatique)
                 </p>
               </div>
             </div>

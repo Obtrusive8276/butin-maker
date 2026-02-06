@@ -9,7 +9,8 @@ from .routers import (
     presentation_router,
     tags_router,
     settings_router,
-    tmdb_router
+    tmdb_router,
+    lacale_router
 )
 
 app = FastAPI(
@@ -39,6 +40,7 @@ app.include_router(presentation_router)
 app.include_router(tags_router)
 app.include_router(settings_router)
 app.include_router(tmdb_router)
+app.include_router(lacale_router)
 
 
 @app.get("/")

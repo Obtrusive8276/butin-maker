@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Step, FileItem, Settings, TorrentResponse, MediaInfo, PresentationData } from '../types';
+import type { Step, FileItem, Settings, TorrentResponse, MediaInfo, PresentationData, LaCaleUploadResponse } from '../types';
 
 interface TMDBInfo {
   id: number;
@@ -70,6 +70,13 @@ interface AppState {
 
   mediaInfoFilePath: string | null;
   setMediaInfoFilePath: (path: string | null) => void;
+
+  lacaleUploadStatus: 'idle' | 'loading' | 'success' | 'error';
+  lacaleUploadResult: LaCaleUploadResponse | null;
+  lacaleUploadError: string | null;
+  setLaCaleUploadStatus: (status: 'idle' | 'loading' | 'success' | 'error') => void;
+  setLaCaleUploadResult: (result: LaCaleUploadResponse | null) => void;
+  setLaCaleUploadError: (error: string | null) => void;
 }
 
 const defaultPresentationData: PresentationData = {
@@ -152,4 +159,11 @@ export const useAppStore = create<AppState>((set) => ({
 
   mediaInfoFilePath: null,
   setMediaInfoFilePath: (path) => set({ mediaInfoFilePath: path }),
+
+  lacaleUploadStatus: 'idle',
+  lacaleUploadResult: null,
+  lacaleUploadError: null,
+  setLaCaleUploadStatus: (status) => set({ lacaleUploadStatus: status }),
+  setLaCaleUploadResult: (result) => set({ lacaleUploadResult: result }),
+  setLaCaleUploadError: (error) => set({ lacaleUploadError: error }),
 }));

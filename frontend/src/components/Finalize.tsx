@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Download, Copy, Check, ExternalLink, FileText, File, Tags, Eye, X, Play, Loader2 } from 'lucide-react';
+import { Download, Copy, Check, ExternalLink, FileText, File, Tags, Eye, X, Play, Loader2, Upload, AlertTriangle, RefreshCw } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
-import { torrentApi, mediainfoApi, tagsApi, presentationApi } from '../services/api';
+import { torrentApi, mediainfoApi, tagsApi, presentationApi, lacaleApi } from '../services/api';
 import { useClipboard } from '../hooks/useClipboard';
 import { getResolutionFromWidth } from '../utils/format';
-import type { Caracteristique } from '../types';
+import type { Caracteristique, LaCaleUploadResponse } from '../types';
 
 export default function Finalize() {
   const { 
@@ -33,6 +33,9 @@ export default function Finalize() {
   const [nfoContent, setNfoContent] = useState<string | null>(null);
   const [seedingStatus, setSeedingStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [seedingMessage, setSeedingMessage] = useState('');
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [uploadResult, setUploadResult] = useState<LaCaleUploadResponse | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Fonction de sanitization sécurisée avec DOMPurify
   const sanitizeHtml = (html: string): string => {
@@ -397,6 +400,66 @@ export default function Finalize() {
     }
   };
 
+  const hasApiKey = !!settings?.tracker?.lacale_api_key;
+  const canUpload = hasApiKey && torrentResult?.success && torrentResult?.torrent_path;
+
+  const handleAutoUpload = async () => {
+    if (!canUpload || !torrentResult?.torrent_path) return;
+
+    setUploadStatus('loading');
+    setUploadError(null);
+    setUploadResult(null);
+
+    try {
+      // 1. Get category ID from content type
+      const { category_id } = await lacaleApi.getCategoryId(contentType);
+
+      // 2. Build upload request
+      const uploadRequest = {
+        title: releaseName || torrentResult.torrent_name || 'Untitled',
+        category_id,
+        torrent_file_path: torrentResult.torrent_path,
+        tag_ids: [],
+        description: generatedBBCode || undefined,
+        tmdb_id: tmdbInfo?.id ? String(tmdbInfo.id) : undefined,
+        tmdb_type: contentType === 'movie' ? 'MOVIE' : 'TV',
+        cover_url: tmdbInfo?.poster_path || undefined,
+        nfo_file_path: nfoPath || undefined,
+      };
+
+      // 3. Upload
+      const result = await lacaleApi.upload(uploadRequest);
+      setUploadResult(result);
+      setUploadStatus('success');
+    } catch (error: unknown) {
+      setUploadStatus('error');
+      // Extract specific error messages from API responses
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; data?: { detail?: string } } };
+        const status = axiosError.response?.status;
+        const detail = axiosError.response?.data?.detail;
+        
+        if (status === 401) {
+          setUploadError('Clé API invalide. Vérifiez votre clé dans les paramètres.');
+        } else if (status === 403) {
+          setUploadError('Clé API révoquée ou permissions insuffisantes.');
+        } else if (status === 409) {
+          setUploadError('Ce torrent existe déjà sur La Cale (infohash identique).');
+        } else if (status === 429) {
+          setUploadError('Limite de 30 requêtes/minute dépassée. Veuillez patienter.');
+        } else if (status === 404 && detail?.includes('Catégorie')) {
+          setUploadError(`Catégorie non trouvée pour le type "${contentType}".`);
+        } else {
+          setUploadError(detail || `Erreur serveur (${status || 'inconnue'})`);
+        }
+      } else if (error instanceof Error) {
+        setUploadError(error.message);
+      } else {
+        setUploadError('Erreur inconnue lors de l\'upload');
+      }
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto">
       <h2 className="text-lg font-semibold mb-6">Finalisation de l'Upload</h2>
@@ -562,22 +625,117 @@ export default function Finalize() {
         </div>
 
         <div className="bg-gradient-to-r from-primary-500/20 to-primary-600/20 border border-primary-500/30 rounded-lg p-6">
-          <h3 className="font-medium mb-4 text-primary-500">Prêt pour l'upload!</h3>
-          <p className="text-sm text-gray-300 mb-4">
-            Tous les éléments sont prêts. Cliquez sur le bouton ci-dessous pour ouvrir la page d'upload de La Cale.
-          </p>
-          <button
-            onClick={handleGoToUpload}
-            disabled={!settings?.tracker.upload_url}
-            className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-gray-900 rounded-lg font-bold hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ExternalLink className="w-5 h-5" />
-            Ouvrir La Cale - Upload
-          </button>
-          {!settings?.tracker.upload_url && (
-            <p className="text-xs text-yellow-500 mt-2">
-              Configurez l'URL d'upload dans les paramètres
-            </p>
+          <h3 className="font-medium mb-4 text-primary-500">Upload vers La Cale</h3>
+          
+          {/* Upload automatique */}
+          {hasApiKey ? (
+            <div className="space-y-4">
+              {uploadStatus === 'idle' && (
+                <>
+                  <p className="text-sm text-gray-300">
+                    Upload automatique via l'API La Cale. Le torrent, la description et les métadonnées seront envoyés directement.
+                  </p>
+                  <button
+                    onClick={handleAutoUpload}
+                    disabled={!canUpload}
+                    className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-gray-900 rounded-lg font-bold hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Upload className="w-5 h-5" />
+                    Upload automatique vers La Cale
+                  </button>
+                  {!torrentResult?.success && (
+                    <p className="text-xs text-yellow-500">
+                      Créez d'abord un torrent à l'étape précédente
+                    </p>
+                  )}
+                </>
+              )}
+
+              {uploadStatus === 'loading' && (
+                <div className="flex items-center gap-3 text-gray-300">
+                  <Loader2 className="w-5 h-5 animate-spin text-primary-500" />
+                  <span>Upload en cours vers La Cale...</span>
+                </div>
+              )}
+
+              {uploadStatus === 'success' && uploadResult && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-green-400">
+                    <Check className="w-5 h-5" />
+                    <span className="font-medium">Upload réussi!</span>
+                  </div>
+                  {uploadResult.link && (
+                    <a
+                      href={uploadResult.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-medium transition-colors w-fit"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Voir le torrent sur La Cale
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {uploadStatus === 'error' && (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2 text-red-400">
+                    <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+                    <span className="text-sm">{uploadError}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setUploadStatus('idle');
+                      setUploadError(null);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Réessayer
+                  </button>
+                </div>
+              )}
+
+              {/* Séparateur + fallback manuel */}
+              <div className="border-t border-gray-700 pt-4 mt-4">
+                <p className="text-xs text-gray-500 mb-2">Ou upload manuel :</p>
+                <button
+                  onClick={handleGoToUpload}
+                  disabled={!settings?.tracker.upload_url}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Ouvrir La Cale - Upload manuel
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Pas d'API key - upload manuel uniquement */
+            <div className="space-y-4">
+              <div className="flex items-start gap-2 text-yellow-500 text-sm">
+                <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+                <p>
+                  Clé API non configurée. Ajoutez votre clé API La Cale dans les Paramètres pour activer l'upload automatique.
+                </p>
+              </div>
+              <p className="text-sm text-gray-300">
+                Vous pouvez toujours uploader manuellement via le site La Cale.
+              </p>
+              <button
+                onClick={handleGoToUpload}
+                disabled={!settings?.tracker.upload_url}
+                className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-gray-900 rounded-lg font-bold hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ExternalLink className="w-5 h-5" />
+                Ouvrir La Cale - Upload
+              </button>
+              {!settings?.tracker.upload_url && (
+                <p className="text-xs text-yellow-500">
+                  Configurez l'URL d'upload dans les paramètres
+                </p>
+              )}
+            </div>
           )}
         </div>
 
@@ -603,6 +761,10 @@ export default function Finalize() {
             <li>
               <span className="text-gray-500">Tags:</span>{' '}
               {selectedTags.length} sélectionnés
+            </li>
+            <li>
+              <span className="text-gray-500">Upload La Cale:</span>{' '}
+              {uploadStatus === 'success' ? '✓ Uploadé' : uploadStatus === 'error' ? '✗ Erreur' : uploadStatus === 'loading' ? '⏳ En cours...' : '○ En attente'}
             </li>
           </ul>
         </div>

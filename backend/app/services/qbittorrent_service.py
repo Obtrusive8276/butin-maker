@@ -80,6 +80,7 @@ class QBittorrentService:
             t = torf.Torrent(path=source_path)
             t.name = content_name
             t.private = private
+            t.source = "lacale"
             
             if piece_size:
                 t.piece_size = piece_size

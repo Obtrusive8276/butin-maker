@@ -224,6 +224,61 @@ class TestUserSettingsUpdate:
             assert test_settings._data["qbittorrent"]["port"] == 9999
 
 
+class TestUserSettingsLaCaleApiKey:
+    """Tests pour le champ lacale_api_key dans les settings"""
+    
+    def test_defaults_include_lacale_api_key(self):
+        """Vérifie que DEFAULTS contient tracker.lacale_api_key"""
+        assert "tracker" in UserSettings.DEFAULTS
+        assert "lacale_api_key" in UserSettings.DEFAULTS["tracker"]
+        assert UserSettings.DEFAULTS["tracker"]["lacale_api_key"] == ""
+    
+    def test_get_returns_lacale_api_key_when_absent(self):
+        """Vérifie que get() retourne lacale_api_key même si absent du JSON sauvegardé"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_file = Path(tmpdir) / "settings.json"
+            # Fichier sans lacale_api_key
+            partial_data = {
+                "tracker": {
+                    "announce_url": "http://test",
+                    "upload_url": "https://la-cale.space/upload"
+                }
+            }
+            with open(settings_file, "w") as f:
+                json.dump(partial_data, f)
+            
+            test_settings = UserSettings.__new__(UserSettings)
+            test_settings.settings_file = settings_file
+            test_settings._data = test_settings._load()
+            result = test_settings.get()
+            
+            # lacale_api_key doit être présent avec la valeur par défaut
+            assert "lacale_api_key" in result["tracker"]
+            assert result["tracker"]["lacale_api_key"] == ""
+    
+    def test_save_and_reload_lacale_api_key(self):
+        """Vérifie que l'API key La Cale est correctement sauvegardée et rechargée"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_file = Path(tmpdir) / "settings.json"
+            
+            # Créer settings, sauvegarder avec API key
+            test_settings = UserSettings.__new__(UserSettings)
+            test_settings.settings_file = settings_file
+            test_settings._data = test_settings._load()
+            
+            data = test_settings.get()
+            data["tracker"]["lacale_api_key"] = "test_api_key_123"
+            test_settings.save(data)
+            
+            # Recharger depuis le fichier
+            test_settings2 = UserSettings.__new__(UserSettings)
+            test_settings2.settings_file = settings_file
+            test_settings2._data = test_settings2._load()
+            result = test_settings2.get()
+            
+            assert result["tracker"]["lacale_api_key"] == "test_api_key_123"
+
+
 class TestSettingsClass:
     """Tests de la classe Settings (Pydantic)"""
     

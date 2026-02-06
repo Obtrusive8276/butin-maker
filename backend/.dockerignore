@@ -40,6 +40,9 @@ data/
 output/
 config/
 
+# Tests
+tests/
+
 # Logs
 *.log
 logs/

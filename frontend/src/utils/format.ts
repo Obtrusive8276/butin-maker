@@ -17,7 +17,7 @@ export const formatSize = (bytes: number): string => {
  * Formate une durée en secondes en format lisible (Xh Xm Xs)
  */
 export const formatDuration = (seconds: number | null): string => {
-  if (!seconds) return 'N/A';
+  if (seconds === null || seconds === undefined) return 'N/A';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import FileResponse
 from pathlib import Path
 from pydantic import BaseModel
@@ -29,7 +29,7 @@ async def test_connection(data: ConnectionTest):
 
 @router.post("/create", response_model=TorrentResponse)
 async def create_torrent(data: TorrentCreate):
-    success, result = qbittorrent_service.create_torrent(
+    success, result = await qbittorrent_service.create_torrent(
         source_path=data.source_path,
         name=data.name,
         piece_size=data.piece_size,
@@ -56,10 +56,16 @@ async def create_torrent(data: TorrentCreate):
 @router.get("/download/{filename}")
 async def download_torrent(filename: str):
     from ..config import settings
-    torrent_path = settings.output_path / filename
+    torrent_path = (settings.output_path / filename).resolve()
+    
+    # Security: ensure resolved path stays within output_path
+    try:
+        torrent_path.relative_to(settings.output_path.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     
     if not torrent_path.exists():
-        return {"error": "Fichier non trouvé"}
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
     
     return FileResponse(
         path=torrent_path,

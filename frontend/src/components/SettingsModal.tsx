@@ -107,7 +107,7 @@ export default function SettingsModal() {
                   value={formData.qbittorrent.port}
                   onChange={(e) => setFormData({
                     ...formData,
-                    qbittorrent: { ...formData.qbittorrent, port: parseInt(e.target.value) }
+                    qbittorrent: { ...formData.qbittorrent, port: parseInt(e.target.value) || 0 }
                   })}
                   className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                   placeholder="8080"
@@ -270,7 +270,7 @@ export default function SettingsModal() {
                   placeholder="/data/uploads"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Dossier où seront créés les hardlinks avec le nom de release
+                  Dossier où seront stockés les fichiers générés (torrents, NFO)
                 </p>
               </div>
             </div>

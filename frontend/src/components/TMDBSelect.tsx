@@ -15,7 +15,10 @@ export default function TMDBSelect() {
 
   const { data: extractedTitle, isLoading } = useQuery({
     queryKey: ['extract-title', selectedItem?.name],
-    queryFn: () => (selectedItem ? tmdbApi.extractTitle(selectedItem.name) : null),
+    queryFn: () => {
+      if (!selectedItem) throw new Error('No file selected');
+      return tmdbApi.extractTitle(selectedItem.name);
+    },
     enabled: !!selectedItem && tmdbStatus?.configured,
   });
 

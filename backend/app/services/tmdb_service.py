@@ -7,6 +7,15 @@ class TMDBService:
     BASE_URL = "https://api.themoviedb.org/3"
     IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
     
+    def __init__(self):
+        self._client: Optional[httpx.AsyncClient] = None
+    
+    def _get_client(self) -> httpx.AsyncClient:
+        """Réutilise un client HTTP unique avec timeout"""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=httpx.Timeout(10.0))
+        return self._client
+    
     def _get_user_tmdb_key(self) -> Optional[str]:
         data = user_settings.get()
         tmdb_data = data.get("tmdb", {})
@@ -55,17 +64,17 @@ class TMDBService:
         if not api_key:
             return None
         
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.BASE_URL}{endpoint}",
-                params=self._build_params(**(params or {})),
-                headers=self._get_headers()
-            )
-            
-            if response.status_code != 200:
-                return None
-            
-            return response.json()
+        client = self._get_client()
+        response = await client.get(
+            f"{self.BASE_URL}{endpoint}",
+            params=self._build_params(**(params or {})),
+            headers=self._get_headers()
+        )
+        
+        if response.status_code != 200:
+            return None
+        
+        return response.json()
     
     def _format_movie_result(self, item: dict) -> dict:
         """Formate un résultat de film"""

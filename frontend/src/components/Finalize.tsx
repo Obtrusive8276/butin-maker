@@ -62,16 +62,28 @@ export default function Finalize() {
     html = html.replace(/\[size=([^\]]+)\](.*?)\[\/size\]/gis, '<span style="font-size: $1;">$2</span>');
     
     // [url=...]...[/url]
-    html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" style="color: #60a5fa; text-decoration: underline;">$2</a>');
+    html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gis, (_match, url: string, text: string) => {
+      const safeUrl = /^(https?:\/\/|\/\/)/.test(url) ? url : '#';
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline;">${text}</a>`;
+    });
     
     // [url]...[/url]
-    html = html.replace(/\[url\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" style="color: #60a5fa; text-decoration: underline;">$1</a>');
+    html = html.replace(/\[url\](.*?)\[\/url\]/gis, (_match, url: string) => {
+      const safeUrl = /^(https?:\/\/|\/\/)/.test(url) ? url : '#';
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline;">${safeUrl === '#' ? url : safeUrl}</a>`;
+    });
     
     // [img]...[/img]
-    html = html.replace(/\[img\](.*?)\[\/img\]/gis, '<img src="$1" style="max-width: 300px; height: auto; display: block; margin: 0 auto;" />');
+    html = html.replace(/\[img\](.*?)\[\/img\]/gis, (_match, url: string) => {
+      const safeUrl = /^(https?:\/\/|\/\/)/.test(url) ? url : '';
+      return safeUrl ? `<img src="${safeUrl}" style="max-width: 300px; height: auto; display: block; margin: 0 auto;" />` : '';
+    });
     
     // [img=WxH]...[/img]
-    html = html.replace(/\[img=(\d+)x(\d+)\](.*?)\[\/img\]/gis, '<img src="$3" width="$1" height="$2" style="max-width: 300px; height: auto; display: block; margin: 0 auto;" />');
+    html = html.replace(/\[img=(\d+)x(\d+)\](.*?)\[\/img\]/gis, (_match, w: string, h: string, url: string) => {
+      const safeUrl = /^(https?:\/\/|\/\/)/.test(url) ? url : '';
+      return safeUrl ? `<img src="${safeUrl}" width="${w}" height="${h}" style="max-width: 300px; height: auto; display: block; margin: 0 auto;" />` : '';
+    });
     
     // [quote]...[/quote]
     html = html.replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote style="border-left: 3px solid #6b7280; padding-left: 1rem; margin: 0.5rem 0; color: #9ca3af;">$1</blockquote>');

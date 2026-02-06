@@ -1,4 +1,5 @@
 import qbittorrentapi
+import asyncio
 from typing import Optional, Tuple
 from pathlib import Path
 import torf
@@ -20,10 +21,10 @@ class QBittorrentService:
                 username: str = None, password: str = None) -> Tuple[bool, str]:
         qb_settings = self._get_settings()
         
-        host = host or qb_settings.get("host", "http://localhost")
-        port = port or qb_settings.get("port", 8080)
-        username = username or qb_settings.get("username", "admin")
-        password = password or qb_settings.get("password", "")
+        host = host if host is not None else qb_settings.get("host", "http://localhost")
+        port = port if port is not None else qb_settings.get("port", 8080)
+        username = username if username is not None else qb_settings.get("username", "admin")
+        password = password if password is not None else qb_settings.get("password", "")
         
         try:
             self._client = qbittorrentapi.Client(
@@ -57,7 +58,7 @@ class QBittorrentService:
         except Exception as e:
             return False, f"Échec de connexion: {str(e)}"
     
-    def create_torrent(self, source_path: str, name: str = None,
+    async def create_torrent(self, source_path: str, name: str = None,
                        piece_size: int = None, private: bool = True,
                        tracker_url: str = None) -> Tuple[bool, dict]:
         try:
@@ -89,7 +90,7 @@ class QBittorrentService:
             if announce_url:
                 t.trackers = [[announce_url]]
             
-            t.generate()
+            await asyncio.to_thread(t.generate)
             
             output_file = settings.output_path / f"{torrent_name}.torrent"
             t.write(output_file, overwrite=True)
@@ -124,10 +125,15 @@ class QBittorrentService:
                 return False, msg
         
         try:
-            # Utiliser le save_path des settings si non fourni
+            # Utiliser content_path comme répertoire de save si save_path non fourni
             if not save_path:
                 path_settings = user_settings.get().get("paths", {})
                 save_path = path_settings.get("qbittorrent_download_path", "")
+            
+            # Déterminer le save_path depuis content_path si toujours vide
+            if not save_path and content_path:
+                content = Path(content_path)
+                save_path = str(content.parent) if content.is_file() else str(content.parent)
             
             with open(torrent_path, 'rb') as f:
                 add_params = {

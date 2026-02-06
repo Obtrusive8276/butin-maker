@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { FileDown, Check, AlertCircle, ArrowRight, ArrowLeft, Loader2, Link2 } from 'lucide-react';
 import { torrentApi, filesApi } from '../services/api';
@@ -11,6 +11,13 @@ export default function TorrentCreator() {
   const [trackerUrl, setTrackerUrl] = useState(settings?.tracker.announce_url || '');
   const [createHardlink, setCreateHardlink] = useState(true);
   const [hardlinkResult, setHardlinkResult] = useState<{success: boolean; message: string} | null>(null);
+
+  // Sync trackerUrl when settings change
+  useEffect(() => {
+    if (settings?.tracker.announce_url !== undefined) {
+      setTrackerUrl(settings.tracker.announce_url);
+    }
+  }, [settings?.tracker.announce_url]);
 
   const hardlinkPath = releaseName && selectedFiles[0] 
     ? `${settings?.paths?.hardlink_path || '/data/hardlinks'}/${releaseName}${selectedFiles[0].is_dir ? '' : '.' + selectedFiles[0].name.split('.').pop()}`

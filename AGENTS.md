@@ -752,57 +752,57 @@ Utilisée dans : `MediaInfoViewer.tsx`, `Finalize.tsx`
 
 ### Backend - Critique / Haute priorité
 
-- [ ] **Sécurité - Path traversal `file_service.py`** : Ajouter `_is_path_allowed()` dans `get_file_info()`, `get_directory_size()`, `get_first_video_file()`, `count_video_files()`
-- [ ] **Sécurité - Path traversal `file_service.py`** : Valider que `destination_path` dans `create_hardlink()` est dans un répertoire autorisé
-- [ ] **Sécurité - Path traversal `routers/torrent.py`** : Protéger `download_torrent()` - valider que le path résolu est dans `output_path`
-- [ ] **Sécurité - Path traversal `routers/mediainfo.py`** : Protéger `download_nfo()` - même protection
-- [ ] **Bug - `config.py`** : `_load()` utilise `.copy()` (shallow). Utiliser `copy.deepcopy()` pour éviter la mutation de `DEFAULTS`
-- [ ] **Bug - `config.py`** : `get()` merge écrase les valeurs vides volontaires (empty string remplacé par default). Distinguer clé absente vs valeur vide
-- [ ] **Performance - `qbittorrent_service.py`** : `t.generate()` bloque l'event loop async. Exécuter dans `asyncio.to_thread()`
-- [ ] **Bug - `qbittorrent_service.py`** : `host = host or ...` fait que `host=""` ou `port=0` passent au default. Utiliser `if host is not None`
-- [ ] **Bug - `qbittorrent_service.py`** : Paramètre `content_path` dans `add_torrent_for_seeding()` est accepté mais jamais utilisé
-- [ ] **Performance - `tmdb_service.py`** : Nouveau `httpx.AsyncClient` créé à chaque requête. Créer un client unique réutilisable avec timeout
-- [ ] **Sécurité - `routers/settings.py`** : Les endpoints PATCH acceptent `dict` brut sans validation. Utiliser les modèles Pydantic
+- [x] **Sécurité - Path traversal `file_service.py`** : Ajouter `_is_path_allowed()` dans `get_file_info()`, `get_directory_size()`, `get_first_video_file()`, `count_video_files()`
+- [x] **Sécurité - Path traversal `file_service.py`** : Valider que `destination_path` dans `create_hardlink()` est dans un répertoire autorisé
+- [x] **Sécurité - Path traversal `routers/torrent.py`** : Protéger `download_torrent()` - valider que le path résolu est dans `output_path`
+- [x] **Sécurité - Path traversal `routers/mediainfo.py`** : Protéger `download_nfo()` - même protection
+- [x] **Bug - `config.py`** : `_load()` utilise `.copy()` (shallow). Utiliser `copy.deepcopy()` pour éviter la mutation de `DEFAULTS`
+- [x] **Bug - `config.py`** : `get()` merge écrase les valeurs vides volontaires (empty string remplacé par default). Distinguer clé absente vs valeur vide
+- [x] **Performance - `qbittorrent_service.py`** : `t.generate()` bloque l'event loop async. Exécuter dans `asyncio.to_thread()`
+- [x] **Bug - `qbittorrent_service.py`** : `host = host or ...` fait que `host=""` ou `port=0` passent au default. Utiliser `if host is not None`
+- [x] **Bug - `qbittorrent_service.py`** : Paramètre `content_path` dans `add_torrent_for_seeding()` est accepté mais jamais utilisé
+- [x] **Performance - `tmdb_service.py`** : Nouveau `httpx.AsyncClient` créé à chaque requête. Créer un client unique réutilisable avec timeout
+- [x] **Sécurité - `routers/settings.py`** : Les endpoints PATCH acceptent `dict` brut sans validation. Utiliser les modèles Pydantic
 
 ### Backend - Moyenne priorité
 
-- [ ] **Debug - `routers/tmdb.py`** : Supprimer les `print(f"[DEBUG]...")` en production
-- [ ] **Code quality - `file_service.py`** : Bare `except:` attrape tout (SystemExit, etc.). Remplacer par `except Exception:`
+- [x] **Debug - `routers/tmdb.py`** : Supprimer les `print(f"[DEBUG]...")` en production
+- [x] **Code quality - `file_service.py`** : Bare `except:` attrape tout (SystemExit, etc.). Remplacer par `except Exception:`
 - [ ] **Typo - `naming_service.py`** : `"vvc": "VCC"` devrait être `"VVC"`
 - [ ] **Bug - `naming_service.py`** : Faux positifs détection plateforme/source par substring (`"max"` matche `"maximum"`). Utiliser des word boundaries regex
-- [ ] **Config - `main.py`** : CORS origins hardcodés. Rendre configurable via variable d'environnement
+- [x] **Config - `main.py`** : CORS origins hardcodés. Rendre configurable via variable d'environnement
 - [ ] **Logging - `tmdb_service.py`** : Erreurs TMDB avalées silencieusement (401/404 retournent tous `None`). Logger le status + body
-- [ ] **Performance - `routers/tags.py`** : `tags_data.json` relu et parsé à chaque requête. Mettre en cache + rendre le path configurable
-- [ ] **API - `routers/files.py`, `torrent.py`, `mediainfo.py`** : Retournent HTTP 200 avec JSON erreur. Utiliser `HTTPException(status_code=404)`
-- [ ] **Code quality - `mediainfo_service.py`** : Double `MI.parse()` inutile. Supprimer le premier appel
-- [ ] **Code quality** : Remplacer tous les `print()` par le module `logging`
+- [x] **Performance - `routers/tags.py`** : `tags_data.json` relu et parsé à chaque requête. Mettre en cache + rendre le path configurable
+- [x] **API - `routers/files.py`, `torrent.py`, `mediainfo.py`** : Retournent HTTP 200 avec JSON erreur. Utiliser `HTTPException(status_code=404)`
+- [x] **Code quality - `mediainfo_service.py`** : Double `MI.parse()` inutile. Supprimer le premier appel
+- [x] **Code quality** : Remplacer tous les `print()` par le module `logging`
 
 ### Backend - Basse priorité
 
-- [ ] **Dead code - `main.py`** : Imports morts `StaticFiles` et `Path`. Supprimer
-- [ ] **Config - `run.py`** : `reload=True` ne devrait pas être actif en production. Conditionner via env var `DEBUG`
+- [x] **Dead code - `main.py`** : Imports morts `StaticFiles` et `Path`. Supprimer
+- [x] **Config - `run.py`** : `reload=True` ne devrait pas être actif en production. Conditionner via env var `DEBUG`
 
 ### Frontend - Critique / Haute priorité
 
-- [ ] **Sécurité XSS - `Finalize.tsx`** : `[url=javascript:alert(1)]` passe dans `bbcodeToHtml` et produit un `<a href="javascript:...">`. Valider que les URLs commencent par `http://` ou `https://`
+- [x] **Sécurité XSS - `Finalize.tsx`** : `[url=javascript:alert(1)]` passe dans `bbcodeToHtml` et produit un `<a href="javascript:...">`. Valider que les URLs commencent par `http://` ou `https://`
 - [ ] **Bug - `FileExplorer.tsx`** : `handleGlobalSearch` n'a pas de `catch` - l'erreur API est silencieuse, le spinner disparaît sans feedback
 - [ ] **Bug - `TMDBSearch.tsx`** : Cast unsafe `e.target.value as 'movie' | 'tv' | undefined || undefined`. Utiliser une conversion explicite
 - [ ] **Anti-pattern - `RenameEditor.tsx`** : `mutate()` appelé dans `useEffect` avec deps incomplètes. Risque de boucle infinie. Refactorer
 
 ### Frontend - Moyenne priorité
 
-- [ ] **Bug - `format.ts`** : `formatDuration(0)` retourne `'N/A'` car `!0` est truthy. Utiliser `=== null || === undefined`
-- [ ] **Bug - `RenameEditor.tsx`** : Hardlink path hardcodé `/data/` au lieu de `settings?.paths?.hardlink_path`
-- [ ] **Bug - `RenameEditor.tsx`** : `season || undefined` convertit saison 0 (spécials) en `undefined`. Utiliser `??`
-- [ ] **Bug - `TorrentCreator.tsx`** : `trackerUrl` initialisé une fois au mount, pas synchronisé si settings changent
-- [ ] **Bug - `SettingsModal.tsx`** : `parseInt("")` retourne `NaN` envoyé au backend si le champ port est vidé
-- [ ] **Bug - `useClipboard.ts`** : `setTimeout` qui reset `copied` n'est jamais clear. setState sur composant démonté possible
+- [x] **Bug - `format.ts`** : `formatDuration(0)` retourne `'N/A'` car `!0` est truthy. Utiliser `=== null || === undefined`
+- [x] **Bug - `RenameEditor.tsx`** : Hardlink path hardcodé `/data/` au lieu de `settings?.paths?.hardlink_path`
+- [x] **Bug - `RenameEditor.tsx`** : `season || undefined` convertit saison 0 (spécials) en `undefined`. Utiliser `??`
+- [x] **Bug - `TorrentCreator.tsx`** : `trackerUrl` initialisé une fois au mount, pas synchronisé si settings changent
+- [x] **Bug - `SettingsModal.tsx`** : `parseInt("")` retourne `NaN` envoyé au backend si le champ port est vidé
+- [x] **Bug - `useClipboard.ts`** : `setTimeout` qui reset `copied` n'est jamais clear. setState sur composant démonté possible
 - [ ] **UX - `Sidebar.tsx`** : Étapes marquées "complétées" par position et non par état réel. Sauter une étape la marque verte
-- [ ] **UX - `TMDBSelect.tsx`** : Pas de guard si aucun fichier sélectionné. L'utilisateur peut chercher TMDB sans fichier, les étapes suivantes planteront
-- [ ] **Sécurité - `Finalize.tsx`** : `[img]` injecte des URLs externes sans restriction (tracking IP possible)
+- [x] **UX - `TMDBSelect.tsx`** : Pas de guard si aucun fichier sélectionné. L'utilisateur peut chercher TMDB sans fichier, les étapes suivantes planteront
+- [x] **Sécurité - `Finalize.tsx`** : `[img]` injecte des URLs externes sans restriction (tracking IP possible)
 
 ### Frontend - Basse priorité
 
-- [ ] **Texte - `SettingsModal.tsx`** : Texte d'aide du champ "Dossier de sortie" est un copier-coller du champ hardlink
+- [x] **Texte - `SettingsModal.tsx`** : Texte d'aide du champ "Dossier de sortie" est un copier-coller du champ hardlink
 - [ ] **Dead code - `api.ts`** : `renameFile` défini mais jamais appelé
-- [ ] **Debug - `RenameEditor.tsx`** : `console.log` laissés en production
+- [x] **Debug - `RenameEditor.tsx`** : `console.log` laissés en production

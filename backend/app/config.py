@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from pathlib import Path
+import copy
 import json
 import os
 from typing import Optional
@@ -91,7 +92,7 @@ class UserSettings:
         if self.settings_file.exists():
             with open(self.settings_file, "r", encoding="utf-8") as f:
                 return json.load(f)
-        return self.DEFAULTS.copy()
+        return copy.deepcopy(self.DEFAULTS)
     
     def save(self, data: dict):
         self._data = data
@@ -104,17 +105,18 @@ class UserSettings:
         for key, default_value in self.DEFAULTS.items():
             if key in self._data:
                 if isinstance(default_value, dict):
-                    # Fusionner les sous-dictionnaires, en gardant les defaults si valeur vide
+                    # Fusionner les sous-dictionnaires: utiliser le default uniquement si la clé est absente
                     merged = {}
                     for k, v in default_value.items():
-                        saved_value = self._data[key].get(k, "")
-                        # Utiliser la valeur sauvegardée seulement si elle n'est pas vide
-                        merged[k] = saved_value if saved_value != "" else v
+                        if k in self._data[key]:
+                            merged[k] = self._data[key][k]
+                        else:
+                            merged[k] = v
                     result[key] = merged
                 else:
                     result[key] = self._data[key]
             else:
-                result[key] = default_value
+                result[key] = copy.deepcopy(default_value)
         return result
     
     def update(self, key: str, value: dict):

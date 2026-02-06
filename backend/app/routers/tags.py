@@ -1,12 +1,19 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pathlib import Path
 import json
 from ..config import settings
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 
+# Cache for tags data (loaded once from disk)
+_tags_cache: dict | None = None
+
 
 def load_tags_data():
+    global _tags_cache
+    if _tags_cache is not None:
+        return _tags_cache
+    
     # Priorité: /app/data/tags_data.json (volume Docker)
     tags_file = Path("/app/data/tags_data.json")
     if not tags_file.exists():
@@ -17,7 +24,8 @@ def load_tags_data():
     
     if tags_file.exists():
         with open(tags_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+            _tags_cache = json.load(f)
+            return _tags_cache
     return {"quaiprincipalcategories": []}
 
 
@@ -43,7 +51,7 @@ async def get_category(slug: str):
         if cat["slug"] == slug:
             return cat
     
-    return {"error": "Catégorie non trouvée"}
+    raise HTTPException(status_code=404, detail="Catégorie non trouvée")
 
 
 @router.get("/subcategories/{category_slug}")

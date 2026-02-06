@@ -1,8 +1,11 @@
 from pymediainfo import MediaInfo as MI
 from pathlib import Path
 from typing import Optional, List, Tuple
+import logging
 from ..models.media import MediaInfo, VideoTrack, AudioTrack, SubtitleTrack, NFOData
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class MediaInfoService:
@@ -74,13 +77,11 @@ class MediaInfoService:
                 subtitle_tracks=subtitle_tracks
             )
         except Exception as e:
-            print(f"Erreur MediaInfo: {e}")
+            logger.error("Erreur MediaInfo: %s", e)
             return None
     
     def generate_nfo(self, file_path: str, release_name: str = None) -> Tuple[bool, Optional[NFOData]]:
         try:
-            media_info = MI.parse(file_path)
-            
             text_output = MI.parse(file_path, output="STRING", full=False)
             
             path = Path(file_path)
@@ -111,7 +112,7 @@ class MediaInfoService:
                 content=text_output
             )
         except Exception as e:
-            print(f"Erreur génération NFO: {e}")
+            logger.error("Erreur génération NFO: %s", e)
             return False, None
     
     def get_raw_mediainfo(self, file_path: str) -> Optional[str]:

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 interface UseClipboardReturn {
   copy: (text: string) => Promise<boolean>;
@@ -9,6 +9,26 @@ interface UseClipboardReturn {
 export function useClipboard(timeout: number = 2000): UseClipboardReturn {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear timeout on unmount to prevent setState on unmounted component
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  const resetCopiedAfterTimeout = () => {
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      setCopied(false);
+      timeoutRef.current = null;
+    }, timeout);
+  };
 
   const legacyCopy = (text: string): boolean => {
     const textarea = document.createElement('textarea');
@@ -45,11 +65,7 @@ export function useClipboard(timeout: number = 2000): UseClipboardReturn {
         await navigator.clipboard.writeText(text);
         setCopied(true);
         setError(null);
-
-        setTimeout(() => {
-          setCopied(false);
-        }, timeout);
-
+        resetCopiedAfterTimeout();
         return true;
       }
     } catch (err) {
@@ -60,11 +76,7 @@ export function useClipboard(timeout: number = 2000): UseClipboardReturn {
     if (legacySuccess) {
       setCopied(true);
       setError(null);
-
-      setTimeout(() => {
-        setCopied(false);
-      }, timeout);
-
+      resetCopiedAfterTimeout();
       return true;
     }
 

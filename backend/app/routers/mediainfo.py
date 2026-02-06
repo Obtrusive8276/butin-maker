@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from pathlib import Path
 from ..services.mediainfo_service import mediainfo_service
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/mediainfo", tags=["mediainfo"])
 async def analyze_file(path: str = Query(..., description="Chemin du fichier média")):
     result = mediainfo_service.analyze_file(path)
     if result is None:
-        return {"error": "Impossible d'analyser le fichier"}
+        raise HTTPException(status_code=400, detail="Impossible d'analyser le fichier")
     return result.model_dump()
 
 
@@ -19,7 +19,7 @@ async def analyze_file(path: str = Query(..., description="Chemin du fichier mé
 async def get_raw_mediainfo(path: str = Query(..., description="Chemin du fichier média")):
     result = mediainfo_service.get_raw_mediainfo(path)
     if result is None:
-        return {"error": "Impossible d'obtenir les informations"}
+        raise HTTPException(status_code=400, detail="Impossible d'obtenir les informations")
     return PlainTextResponse(content=result)
 
 
@@ -40,10 +40,16 @@ async def generate_nfo(
 
 @router.get("/download-nfo/{filename}")
 async def download_nfo(filename: str):
-    nfo_path = settings.output_path / filename
+    nfo_path = (settings.output_path / filename).resolve()
+    
+    # Security: ensure resolved path stays within output_path
+    try:
+        nfo_path.relative_to(settings.output_path.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Accès refusé")
     
     if not nfo_path.exists():
-        return {"error": "Fichier non trouvé"}
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
     
     return FileResponse(
         path=nfo_path,

@@ -1,9 +1,12 @@
 from pathlib import Path
 from typing import List, Optional, Tuple
+import logging
 import os
 import shutil
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class FileItem:
@@ -74,7 +77,7 @@ class FileService:
                     if not is_dir:
                         try:
                             size = item.stat().st_size
-                        except:
+                        except Exception:
                             pass
                     
                     items.append({
@@ -93,7 +96,7 @@ class FileService:
         except PermissionError:
             return []
         except Exception as e:
-            print(f"Erreur listage: {e}")
+            logger.error("Erreur listage: %s", e)
             return []
     
     def get_parent_path(self, current_path: str) -> Optional[str]:
@@ -109,6 +112,8 @@ class FileService:
     def get_file_info(self, file_path: str) -> Optional[dict]:
         try:
             path = Path(file_path)
+            if not self._is_path_allowed(path):
+                return None
             if not path.exists():
                 return None
             
@@ -128,10 +133,12 @@ class FileService:
         total_size = 0
         try:
             path = Path(directory_path)
+            if not self._is_path_allowed(path):
+                return 0
             for item in path.rglob('*'):
                 if item.is_file():
                     total_size += item.stat().st_size
-        except:
+        except Exception:
             pass
         return total_size
     
@@ -139,6 +146,8 @@ class FileService:
         """Trouve le premier fichier vidéo dans un dossier (récursif)"""
         try:
             path = Path(directory_path)
+            if not self._is_path_allowed(path):
+                return None
             if not path.exists() or not path.is_dir():
                 return None
             
@@ -165,13 +174,15 @@ class FileService:
                 "extension": first_video.suffix.lower()
             }
         except Exception as e:
-            print(f"Erreur recherche vidéo: {e}")
+            logger.error("Erreur recherche vidéo: %s", e)
             return None
     
     def count_video_files(self, directory_path: str) -> int:
         """Compte le nombre de fichiers vidéo dans un dossier"""
         try:
             path = Path(directory_path)
+            if not self._is_path_allowed(path):
+                return 0
             if not path.exists() or not path.is_dir():
                 return 0
             
@@ -183,7 +194,7 @@ class FileService:
                     count += 1
             
             return count
-        except:
+        except Exception:
             return 0
     
     def is_video_file(self, file_path: str) -> bool:
@@ -231,7 +242,7 @@ class FileService:
                     if not is_dir:
                         try:
                             size = item.stat().st_size
-                        except:
+                        except Exception:
                             pass
                     
                     results.append({
@@ -250,7 +261,7 @@ class FileService:
             results.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
             return results
         except Exception as e:
-            print(f"Erreur recherche: {e}")
+            logger.error("Erreur recherche: %s", e)
             return []
     
     def create_hardlink(self, source_path: str, destination_path: str) -> Tuple[bool, str]:
@@ -275,6 +286,19 @@ class FileService:
             if not self._is_path_allowed(source):
                 return False, "Accès refusé: la source n'est pas dans le répertoire média"
             
+            # Vérifier que la destination est dans un répertoire autorisé (hardlink_path ou media_root)
+            from app.config import user_settings
+            hardlink_path = user_settings.get().get("paths", {}).get("hardlink_path", "")
+            if hardlink_path:
+                try:
+                    destination.resolve().relative_to(Path(hardlink_path).resolve())
+                except ValueError:
+                    return False, "Accès refusé: la destination n'est pas dans le répertoire de hardlinks configuré"
+            else:
+                # Si aucun hardlink_path configuré, autoriser uniquement dans media_root
+                if not self._is_path_allowed(destination):
+                    return False, "Accès refusé: la destination n'est pas dans le répertoire média. Configurez un dossier de hardlinks dans les paramètres."
+            
             # Créer le dossier parent de destination s'il n'existe pas
             destination_parent = destination.parent
             try:
@@ -290,7 +314,7 @@ class FileService:
                         if destination.stat().st_ino == source.stat().st_ino:
                             # Même inode = même fichier (déjà hardlinké)
                             return True, f"Hardlink déjà existant: {destination_path}"
-                    except:
+                    except Exception:
                         pass
                 # Pour les dossiers, on vérifie si le dossier existe et on traite les fichiers
                 elif source.is_dir() and destination.is_dir():
@@ -337,19 +361,19 @@ class FileService:
                                         # Fichier différent, on skip avec un warning
                                         skipped_count += 1
                                         continue
-                                except:
+                                except Exception:
                                     skipped_count += 1
                                     continue
                             
                             try:
-                                os.link(item, dest_file)
-                                linked_count += 1
+                                    os.link(item, dest_file)
+                                    linked_count += 1
                             except OSError:
                                 # Si le hardlink échoue, on copie
                                 try:
                                     shutil.copy2(item, dest_file)
                                     error_count += 1
-                                except:
+                                except Exception:
                                     error_count += 1
                     
                     messages = []

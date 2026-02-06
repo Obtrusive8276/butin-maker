@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, Body
+from fastapi import APIRouter, Query, Body, HTTPException
 from typing import Optional, List
 from pydantic import BaseModel
 from ..services.file_service import file_service
@@ -35,7 +35,7 @@ async def list_directory(
 async def get_file_info(path: str = Query(..., description="Chemin du fichier")):
     info = file_service.get_file_info(path)
     if info is None:
-        return {"error": "Fichier non trouvé"}
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
     return info
 
 
@@ -50,7 +50,7 @@ async def get_first_video(path: str = Query(..., description="Chemin du réperto
     """Trouve le premier fichier vidéo dans un dossier"""
     video = file_service.get_first_video_file(path)
     if video is None:
-        return {"error": "Aucun fichier vidéo trouvé"}
+        raise HTTPException(status_code=404, detail="Aucun fichier vidéo trouvé")
     return video
 
 

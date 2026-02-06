@@ -70,22 +70,25 @@ class TestQBittorrentServiceTorrent:
     def setup_method(self):
         self.service = QBittorrentService()
     
-    def test_create_torrent_path_not_exists(self):
+    @pytest.mark.asyncio
+    async def test_create_torrent_path_not_exists(self):
         """Test création torrent avec chemin inexistant"""
-        success, result = self.service.create_torrent("/nonexistent/path")
+        success, result = await self.service.create_torrent("/nonexistent/path")
         
         assert success == False
         assert "error" in result
     
-    def test_create_torrent_returns_dict_on_failure(self):
+    @pytest.mark.asyncio
+    async def test_create_torrent_returns_dict_on_failure(self):
         """Test que create_torrent retourne un dict avec error"""
-        success, result = self.service.create_torrent("/fake/path")
+        success, result = await self.service.create_torrent("/fake/path")
         
         assert isinstance(result, dict)
         if not success:
             assert "error" in result
 
-    def test_create_torrent_file_name_includes_extension(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_create_torrent_file_name_includes_extension(self, tmp_path):
         """Test que le contenu inclut l'extension mais pas le nom du torrent"""
         source_file = tmp_path / "The.Onion.Movie.2008.mkv"
         source_file.write_text("fake")
@@ -114,7 +117,7 @@ class TestQBittorrentServiceTorrent:
             with patch('app.services.qbittorrent_service.settings') as mock_settings:
                 mock_settings.output_path = tmp_path
 
-                success, result = self.service.create_torrent(
+                success, result = await self.service.create_torrent(
                     source_path=str(source_file),
                     name="The.Onion.Movie.2008"
                 )
@@ -124,7 +127,8 @@ class TestQBittorrentServiceTorrent:
                 assert FakeTorrent.last_instance is not None
                 assert FakeTorrent.last_instance.name == "The.Onion.Movie.2008.mkv"
 
-    def test_create_torrent_strips_extension_from_name(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_create_torrent_strips_extension_from_name(self, tmp_path):
         """Test que le nom fourni avec extension est nettoye pour le torrent"""
         source_file = tmp_path / "The.Onion.Movie.2008.mkv"
         source_file.write_text("fake")
@@ -153,7 +157,7 @@ class TestQBittorrentServiceTorrent:
             with patch('app.services.qbittorrent_service.settings') as mock_settings:
                 mock_settings.output_path = tmp_path
 
-                success, result = self.service.create_torrent(
+                success, result = await self.service.create_torrent(
                     source_path=str(source_file),
                     name="The.Onion.Movie.2008.mkv"
                 )
@@ -163,7 +167,8 @@ class TestQBittorrentServiceTorrent:
                 assert FakeTorrent.last_instance is not None
                 assert FakeTorrent.last_instance.name == "The.Onion.Movie.2008.mkv"
 
-    def test_create_torrent_strips_extension_for_directory_name(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_create_torrent_strips_extension_for_directory_name(self, tmp_path):
         """Test que le nom de torrent est nettoye pour un dossier"""
         source_dir = tmp_path / "The.Onion.Movie.2008.mkv"
         source_dir.mkdir()
@@ -192,7 +197,7 @@ class TestQBittorrentServiceTorrent:
             with patch('app.services.qbittorrent_service.settings') as mock_settings:
                 mock_settings.output_path = tmp_path
 
-                success, result = self.service.create_torrent(
+                success, result = await self.service.create_torrent(
                     source_path=str(source_dir),
                     name="The.Onion.Movie.2008.mkv"
                 )

@@ -50,13 +50,6 @@ export default function RenameEditor() {
 
   const generateNameMutation = useMutation({
     mutationFn: () => {
-      // Log pour debug
-      console.log('Generate release name:', {
-        mediaInfo,
-        audioTracks: mediaInfo?.audio_tracks,
-        language: language || undefined,
-      });
-      
       return tmdbApi.generateReleaseName(
         tmdbInfo?.title || selectedItem?.name || '',
         tmdbInfo?.year || null,
@@ -64,8 +57,8 @@ export default function RenameEditor() {
         {
           source: source || undefined,
           contentType: contentType,
-          season: seriesInfo.season || undefined,
-          episode: seriesInfo.episode || undefined,
+          season: seriesInfo.season ?? undefined,
+          episode: seriesInfo.episode ?? undefined,
           isCompleteSeason: seriesInfo.isCompleteSeason,
           edition: edition || undefined,
           info: info || undefined,
@@ -94,11 +87,6 @@ export default function RenameEditor() {
   useEffect(() => {
     // Ne générer que si on a les infos nécessaires et si ce n'est pas déjà fait
     if (selectedItem && mediaInfo && tmdbInfo && !hasGenerated) {
-      console.log('Generating release name with:', {
-        audioTracks: mediaInfo.audio_tracks,
-        trackCount: mediaInfo.audio_tracks?.length,
-        language: language || 'auto-detection'
-      });
       setHasGenerated(true);
       generateNameMutation.mutate();
     }
@@ -115,7 +103,9 @@ export default function RenameEditor() {
       const ext = selectedItem.name.includes('.') 
         ? '.' + selectedItem.name.split('.').pop() 
         : '';
-      setHardlinkPath(`/data/${newName}${selectedItem.is_dir ? '' : ext}`);
+      const basePath = settings?.paths?.hardlink_path || '/data';
+      const separator = basePath.endsWith('/') ? '' : '/';
+      setHardlinkPath(`${basePath}${separator}${newName}${selectedItem.is_dir ? '' : ext}`);
     }
   };
 

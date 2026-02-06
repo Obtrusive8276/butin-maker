@@ -81,7 +81,10 @@ export default function TMDBSearch({ onSelect, onClose, initialQuery, autoSearch
           </div>
           <select
             value={searchType || ''}
-            onChange={(e) => setSearchType(e.target.value as 'movie' | 'tv' | undefined || undefined)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSearchType(val === 'movie' || val === 'tv' ? val : undefined);
+            }}
             className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
           >
             <option value="">Tous</option>

@@ -44,6 +44,7 @@ export default function FileExplorer() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<FileItem[] | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const { selectedFiles, addSelectedFile, removeSelectedFile, setCurrentStep } = useAppStore();
 
   const { data: root } = useQuery({
@@ -72,9 +73,13 @@ export default function FileExplorer() {
   const handleGlobalSearch = useCallback(async () => {
     if (!searchQuery.trim() || !currentPath) return;
     setIsSearching(true);
+    setSearchError(null);
     try {
       const result = await filesApi.search(currentPath, searchQuery, filterType || undefined);
       setSearchResults(result.results);
+    } catch {
+      setSearchResults(null);
+      setSearchError('Erreur lors de la recherche. Veuillez réessayer.');
     } finally {
       setIsSearching(false);
     }
@@ -153,6 +158,7 @@ export default function FileExplorer() {
                 if (e.target.value === '') {
                   setSearchResults(null);
                 }
+                setSearchError(null);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && searchQuery.trim() && currentPath) {
@@ -225,6 +231,10 @@ export default function FileExplorer() {
           {isLoading || isSearching ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+            </div>
+          ) : searchError ? (
+            <div className="flex items-center justify-center h-32 text-red-400 text-sm">
+              {searchError}
             </div>
           ) : (
             <table className="w-full">

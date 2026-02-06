@@ -90,7 +90,7 @@ export default function RenameEditor() {
       setHasGenerated(true);
       generateNameMutation.mutate();
     }
-  }, [selectedItem, mediaInfo, tmdbInfo, hasGenerated]);
+  }, [selectedItem?.path, mediaInfo, tmdbInfo, hasGenerated]);
 
   const handleCopy = () => {
     copyReleaseName(releaseName);

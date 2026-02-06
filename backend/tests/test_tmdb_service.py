@@ -129,5 +129,73 @@ class TestTMDBServiceAsync:
             assert result is None
 
 
+class TestTMDBServiceErrorLogging:
+    """Tests pour le logging des erreurs HTTP"""
+    
+    def setup_method(self):
+        self.service = TMDBService()
+    
+    @pytest.mark.asyncio
+    async def test_make_request_logs_error_on_non_200(self):
+        """Test que _make_request logge l'erreur quand status != 200"""
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.text = "Unauthorized"
+        
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.is_closed = False
+        
+        self.service._client = mock_client
+        
+        with patch.object(self.service, '_get_api_key', return_value="a" * 32):
+            with patch('app.services.tmdb_service.logger') as mock_logger:
+                result = await self.service._make_request("/test/endpoint", {"query": "test"})
+                assert result is None
+                mock_logger.warning.assert_called_once()
+                # Vérifier que les arguments contiennent le status code et l'endpoint
+                call_args = mock_logger.warning.call_args
+                assert 401 in call_args[0], f"Status 401 not in call args: {call_args}"
+                assert "/test/endpoint" in call_args[0], f"Endpoint not in call args: {call_args}"
+    
+    @pytest.mark.asyncio
+    async def test_make_request_logs_404(self):
+        """Test que _make_request logge une 404"""
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.text = "Not Found"
+        
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.is_closed = False
+        
+        self.service._client = mock_client
+        
+        with patch.object(self.service, '_get_api_key', return_value="a" * 32):
+            with patch('app.services.tmdb_service.logger') as mock_logger:
+                result = await self.service._make_request("/movie/999999999")
+                assert result is None
+                mock_logger.warning.assert_called_once()
+                call_args = mock_logger.warning.call_args
+                assert 404 in call_args[0], f"Status 404 not in call args: {call_args}"
+
+    @pytest.mark.asyncio
+    async def test_make_request_returns_json_on_200(self):
+        """Test que _make_request retourne le JSON quand status == 200"""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"results": []}
+        
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.is_closed = False
+        
+        self.service._client = mock_client
+        
+        with patch.object(self.service, '_get_api_key', return_value="a" * 32):
+            result = await self.service._make_request("/search/movie", {"query": "test"})
+            assert result == {"results": []}
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

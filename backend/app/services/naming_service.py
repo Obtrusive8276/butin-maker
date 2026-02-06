@@ -12,7 +12,7 @@ class NamingService:
         "hevc": "HEVC", "h.265": "H265", "h265": "H265", "x265": "x265",
         "avc": "H264", "h.264": "H264", "h264": "H264", "x264": "x264",
         "vp9": "VP9", "av1": "AV1", "vc-1": "VC-1", "vc1": "VC-1",
-        "mpeg": "MPEG", "x266": "x266", "vvc": "VCC"
+        "mpeg": "MPEG", "x266": "x266", "vvc": "VVC"
     }
     
     # Mapping des codecs audio selon La Cale
@@ -445,12 +445,22 @@ class NamingService:
         return ""
     
     def detect_source(self, filename: str) -> str:
-        """Détecte la source depuis le nom de fichier"""
+        """Détecte la source depuis le nom de fichier
+        
+        Utilise des word boundaries regex pour éviter les faux positifs
+        par substring (ex: 'dvd' dans 'dvdscr').
+        """
         filename_lower = filename.lower()
         
         for source_key, source_value in self.SOURCES.items():
-            if source_key in filename_lower:
-                return source_value
+            # Les clés avec des points (ex: ".nf.") matchent déjà précisément
+            # Pour les autres, utiliser des word boundaries regex
+            if '.' in source_key:
+                if source_key in filename_lower:
+                    return source_value
+            else:
+                if re.search(r'(?<![a-z])' + re.escape(source_key) + r'(?![a-z])', filename_lower):
+                    return source_value
         
         return "Unknown"
     
@@ -493,12 +503,21 @@ class NamingService:
         return None
     
     def detect_platform(self, filename: str) -> Optional[str]:
-        """Détecte la plateforme de streaming depuis le nom de fichier"""
+        """Détecte la plateforme de streaming depuis le nom de fichier
+        
+        Utilise des word boundaries regex pour éviter les faux positifs
+        par substring (ex: 'max' dans 'maximum', 'prime' dans 'primed').
+        """
         filename_lower = filename.lower()
         
         for platform_key, platform_value in self.PLATFORMS.items():
-            if platform_key in filename_lower:
-                return platform_value
+            # Les clés avec des points (ex: ".nf.") matchent déjà précisément
+            if '.' in platform_key:
+                if platform_key in filename_lower:
+                    return platform_value
+            else:
+                if re.search(r'(?<![a-z])' + re.escape(platform_key) + r'(?![a-z])', filename_lower):
+                    return platform_value
         
         return None
     

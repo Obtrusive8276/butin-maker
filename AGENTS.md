@@ -768,10 +768,10 @@ Utilisée dans : `MediaInfoViewer.tsx`, `Finalize.tsx`
 
 - [x] **Debug - `routers/tmdb.py`** : Supprimer les `print(f"[DEBUG]...")` en production
 - [x] **Code quality - `file_service.py`** : Bare `except:` attrape tout (SystemExit, etc.). Remplacer par `except Exception:`
-- [ ] **Typo - `naming_service.py`** : `"vvc": "VCC"` devrait être `"VVC"`
-- [ ] **Bug - `naming_service.py`** : Faux positifs détection plateforme/source par substring (`"max"` matche `"maximum"`). Utiliser des word boundaries regex
+- [x] **Typo - `naming_service.py`** : `"vvc": "VCC"` devrait être `"VVC"`
+- [x] **Bug - `naming_service.py`** : Faux positifs détection plateforme/source par substring (`"max"` matche `"maximum"`). Utiliser des word boundaries regex
 - [x] **Config - `main.py`** : CORS origins hardcodés. Rendre configurable via variable d'environnement
-- [ ] **Logging - `tmdb_service.py`** : Erreurs TMDB avalées silencieusement (401/404 retournent tous `None`). Logger le status + body
+- [x] **Logging - `tmdb_service.py`** : Erreurs TMDB avalées silencieusement (401/404 retournent tous `None`). Logger le status + body
 - [x] **Performance - `routers/tags.py`** : `tags_data.json` relu et parsé à chaque requête. Mettre en cache + rendre le path configurable
 - [x] **API - `routers/files.py`, `torrent.py`, `mediainfo.py`** : Retournent HTTP 200 avec JSON erreur. Utiliser `HTTPException(status_code=404)`
 - [x] **Code quality - `mediainfo_service.py`** : Double `MI.parse()` inutile. Supprimer le premier appel
@@ -785,9 +785,9 @@ Utilisée dans : `MediaInfoViewer.tsx`, `Finalize.tsx`
 ### Frontend - Critique / Haute priorité
 
 - [x] **Sécurité XSS - `Finalize.tsx`** : `[url=javascript:alert(1)]` passe dans `bbcodeToHtml` et produit un `<a href="javascript:...">`. Valider que les URLs commencent par `http://` ou `https://`
-- [ ] **Bug - `FileExplorer.tsx`** : `handleGlobalSearch` n'a pas de `catch` - l'erreur API est silencieuse, le spinner disparaît sans feedback
-- [ ] **Bug - `TMDBSearch.tsx`** : Cast unsafe `e.target.value as 'movie' | 'tv' | undefined || undefined`. Utiliser une conversion explicite
-- [ ] **Anti-pattern - `RenameEditor.tsx`** : `mutate()` appelé dans `useEffect` avec deps incomplètes. Risque de boucle infinie. Refactorer
+- [x] **Bug - `FileExplorer.tsx`** : `handleGlobalSearch` n'a pas de `catch` - l'erreur API est silencieuse, le spinner disparaît sans feedback
+- [x] **Bug - `TMDBSearch.tsx`** : Cast unsafe `e.target.value as 'movie' | 'tv' | undefined || undefined`. Utiliser une conversion explicite
+- [x] **Anti-pattern - `RenameEditor.tsx`** : `mutate()` appelé dans `useEffect` avec deps incomplètes. Risque de boucle infinie. Refactorer
 
 ### Frontend - Moyenne priorité
 
@@ -797,7 +797,7 @@ Utilisée dans : `MediaInfoViewer.tsx`, `Finalize.tsx`
 - [x] **Bug - `TorrentCreator.tsx`** : `trackerUrl` initialisé une fois au mount, pas synchronisé si settings changent
 - [x] **Bug - `SettingsModal.tsx`** : `parseInt("")` retourne `NaN` envoyé au backend si le champ port est vidé
 - [x] **Bug - `useClipboard.ts`** : `setTimeout` qui reset `copied` n'est jamais clear. setState sur composant démonté possible
-- [ ] **UX - `Sidebar.tsx`** : Étapes marquées "complétées" par position et non par état réel. Sauter une étape la marque verte
+- [x] **UX - `Sidebar.tsx`** : Étapes marquées "complétées" par position et non par état réel. Sauter une étape la marque verte
 - [x] **UX - `TMDBSelect.tsx`** : Pas de guard si aucun fichier sélectionné. L'utilisateur peut chercher TMDB sans fichier, les étapes suivantes planteront
 - [x] **Sécurité - `Finalize.tsx`** : `[img]` injecte des URLs externes sans restriction (tracking IP possible)
 

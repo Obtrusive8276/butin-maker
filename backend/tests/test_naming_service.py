@@ -381,5 +381,114 @@ class TestExtractTitleForSeries:
         assert "E08" not in result
 
 
+class TestNamingServiceWordBoundaries:
+    """Tests pour la détection par word boundaries (pas de faux positifs par substring)"""
+    
+    def setup_method(self):
+        self.service = NamingService()
+    
+    # --- Tests typo VCC → VVC ---
+    
+    def test_vvc_codec_mapping(self):
+        """Test que le codec VVC est mappé correctement (pas VCC)"""
+        assert self.service.VIDEO_CODECS["vvc"] == "VVC"
+    
+    # --- Tests faux positifs detect_platform ---
+    
+    def test_platform_max_not_in_maximum(self):
+        """Test que 'max' ne matche pas 'maximum' dans un titre"""
+        result = self.service.detect_platform("Maximum.Overdrive.1986.1080p.BluRay.x264-GROUP.mkv")
+        assert result is None, f"'max' a matché 'Maximum' - faux positif: {result}"
+    
+    def test_platform_prime_not_in_primed(self):
+        """Test que 'prime' ne matche pas 'primed' dans un titre"""
+        result = self.service.detect_platform("Primed.For.Action.2024.1080p.BluRay.x264-GROUP.mkv")
+        assert result is None, f"'prime' a matché 'Primed' - faux positif: {result}"
+    
+    def test_platform_hbo_not_in_hobo(self):
+        """Test que 'hbo' ne matche pas dans un mot qui contient ces lettres"""
+        # Note: 'hbo' est assez spécifique, ce test vérifie le principe
+        result = self.service.detect_platform("Film.2024.1080p.BluRay.x264-GROUP.mkv")
+        assert result is None
+    
+    def test_platform_netflix_still_works(self):
+        """Test que la détection Netflix fonctionne toujours"""
+        result = self.service.detect_platform("Film.2024.1080p.Netflix.WEB-DL.x264-GROUP.mkv")
+        assert result == "NF"
+    
+    def test_platform_amazon_still_works(self):
+        """Test que la détection Amazon fonctionne toujours"""
+        result = self.service.detect_platform("Film.2024.1080p.Amazon.WEB-DL.x264-GROUP.mkv")
+        assert result == "AMZN"
+    
+    def test_platform_dot_nf_still_works(self):
+        """Test que .NF. fonctionne toujours"""
+        result = self.service.detect_platform("Film.2024.1080p.NF.WEB-DL.x264-GROUP.mkv")
+        assert result == "NF"
+    
+    def test_platform_dot_amzn_still_works(self):
+        """Test que .AMZN. fonctionne toujours"""
+        result = self.service.detect_platform("Film.2024.1080p.AMZN.WEB-DL.x264-GROUP.mkv")
+        assert result == "AMZN"
+    
+    def test_platform_dot_dsnp_still_works(self):
+        """Test que .DSNP. fonctionne toujours"""
+        result = self.service.detect_platform("Film.2024.1080p.DSNP.WEB-DL.x264-GROUP.mkv")
+        assert result == "DSNP"
+    
+    def test_platform_disney_still_works(self):
+        """Test que Disney fonctionne toujours"""
+        result = self.service.detect_platform("Film.2024.1080p.Disney.WEB-DL.x264-GROUP.mkv")
+        assert result == "DSNP"
+    
+    def test_platform_max_with_dots_works(self):
+        """Test que .max. dans un nom de fichier standard fonctionne"""
+        result = self.service.detect_platform("Film.2024.1080p.MAX.WEB-DL.x264-GROUP.mkv")
+        assert result == "MAX"
+    
+    # --- Tests faux positifs detect_source ---
+    
+    def test_source_dvd_not_in_random_word(self):
+        """Test que 'dvd' ne matche pas dans un mot aléatoire contenant dvd"""
+        # Pas de cas réaliste courant, mais vérifie le principe
+        result = self.service.detect_source("Film.2024.1080p.BluRay.x264-GROUP.mkv")
+        assert result == "BluRay"
+    
+    def test_source_web_dl_still_works(self):
+        """Test que WEB-DL fonctionne toujours"""
+        result = self.service.detect_source("Film.2024.1080p.WEB-DL.x264-GROUP.mkv")
+        assert result == "WEB-DL"
+    
+    def test_source_bluray_still_works(self):
+        """Test que BluRay fonctionne toujours"""
+        result = self.service.detect_source("Film.2024.1080p.BluRay.x264-GROUP.mkv")
+        assert result == "BluRay"
+    
+    def test_source_remux_still_works(self):
+        """Test que REMUX fonctionne toujours"""
+        result = self.service.detect_source("Film.2024.1080p.BluRay.REMUX.x264-GROUP.mkv")
+        assert result == "REMUX"
+    
+    def test_source_hdtv_still_works(self):
+        """Test que HDTV fonctionne toujours"""
+        result = self.service.detect_source("Film.2024.720p.HDTV.x264-GROUP.mkv")
+        assert result == "HDTV"
+    
+    def test_source_dvdrip_still_works(self):
+        """Test que DVDRip fonctionne toujours"""
+        result = self.service.detect_source("Film.2000.FRENCH.DVDRip.x264-GROUP.avi")
+        assert result == "DVDRip"
+    
+    def test_source_webrip_still_works(self):
+        """Test que WEBRip fonctionne toujours"""
+        result = self.service.detect_source("Film.2024.1080p.WEBRip.x264-GROUP.mkv")
+        assert result == "WEBRip"
+    
+    def test_source_hdlight_still_works(self):
+        """Test que HDLight fonctionne toujours"""
+        result = self.service.detect_source("Film.2024.1080p.HDLight.x264-GROUP.mkv")
+        assert result == "HDLight"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

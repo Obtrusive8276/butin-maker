@@ -1,6 +1,9 @@
 import httpx
+import logging
 from typing import Optional, List, Dict, Any
 from app.config import settings, user_settings
+
+logger = logging.getLogger(__name__)
 
 
 class TMDBService:
@@ -72,6 +75,10 @@ class TMDBService:
         )
         
         if response.status_code != 200:
+            logger.warning(
+                "TMDB API error: %s %s - status %d: %s",
+                "GET", endpoint, response.status_code, response.text[:200]
+            )
             return None
         
         return response.json()

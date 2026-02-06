@@ -26,15 +26,26 @@ const steps: StepItem[] = [
 ];
 
 export default function Sidebar() {
-  const { currentStep, setCurrentStep, selectedFiles, torrentResult } = useAppStore();
+  const { currentStep, setCurrentStep, selectedFiles, torrentResult, tmdbInfo, mediaInfo, releaseName } = useAppStore();
 
   const getStepStatus = (stepId: Step): 'completed' | 'current' | 'pending' => {
-    const currentIndex = steps.findIndex(s => s.id === currentStep);
-    const stepIndex = steps.findIndex(s => s.id === stepId);
-    
-    if (stepIndex < currentIndex) return 'completed';
-    if (stepIndex === currentIndex) return 'current';
-    return 'pending';
+    if (stepId === currentStep) return 'current';
+    switch (stepId) {
+      case 'files':
+        return selectedFiles.length > 0 ? 'completed' : 'pending';
+      case 'tmdb':
+        return tmdbInfo !== null ? 'completed' : 'pending';
+      case 'nfo':
+        return mediaInfo !== null ? 'completed' : 'pending';
+      case 'rename':
+        return releaseName !== '' ? 'completed' : 'pending';
+      case 'torrent':
+        return torrentResult?.success ? 'completed' : 'pending';
+      case 'finalize':
+        return 'pending';
+      default:
+        return 'pending';
+    }
   };
 
   const canNavigateTo = (stepId: Step): boolean => {

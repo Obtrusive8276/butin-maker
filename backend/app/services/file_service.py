@@ -1,7 +1,8 @@
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import logging
 import os
+import time
 
 from app.config import settings
 
@@ -263,8 +264,12 @@ class FileService:
             logger.error("Erreur recherche: %s", e)
             return []
     
-    def _validate_hardlink_paths(self, source: Path, destination: Path) -> Optional[str]:
+    def _validate_hardlink_paths(self, source: Path, destination: Path,
+                                   source_resolved: Path, destination_resolved: Path) -> Optional[str]:
         """Valide les chemins source et destination pour un hardlink.
+        
+        Les paths résolus sont passés en paramètre pour éviter de les recalculer
+        (chaque resolve() fait un appel système, très lent sur NFS).
         
         Returns:
             None si valide, message d'erreur sinon.
@@ -272,77 +277,59 @@ class FileService:
         if not source.exists():
             return f"La source n'existe pas: {source}"
         
-        if not self._is_path_allowed(source):
+        # Vérifier source dans media_root avec les paths déjà résolus
+        try:
+            source_resolved.relative_to(self.media_root.resolve())
+        except ValueError:
             return "Accès refusé: la source n'est pas dans le répertoire média"
         
         from app.config import user_settings
         hardlink_path = user_settings.get().get("paths", {}).get("hardlink_path", "")
         if hardlink_path:
             try:
-                destination.resolve().relative_to(Path(hardlink_path).resolve())
+                destination_resolved.relative_to(Path(hardlink_path).resolve())
             except ValueError:
                 return "Accès refusé: la destination n'est pas dans le répertoire de hardlinks configuré"
         else:
-            if not self._is_path_allowed(destination):
+            try:
+                destination_resolved.relative_to(self.media_root.resolve())
+            except ValueError:
                 return "Accès refusé: la destination n'est pas dans le répertoire média. Configurez un dossier de hardlinks dans les paramètres."
         
         return None
 
-    def _build_existing_inodes(self, directory: Path) -> dict:
-        """Construit un index inode → chemin relatif pour les fichiers existants dans un dossier.
+    def _scan_inodes(self, directory: str) -> Dict[str, int]:
+        """Scanne un dossier et retourne {chemin_relatif: inode} pour chaque fichier.
         
-        Utilise os.scandir récursif pour minimiser les appels système (1 stat par fichier
-        au lieu de exists() + stat() + stat() = 3 appels).
+        Utilise os.scandir récursif avec entry.stat() natif (pas de Path().stat()).
+        Sur Linux, entry.stat() utilise le cache du noyau (READDIRPLUS sur NFS),
+        ce qui est 10-100x plus rapide que Path().stat() qui fait un appel stat() séparé.
         
+        Args:
+            directory: Chemin absolu du dossier à scanner (string pour éviter Path overhead).
+            
         Returns:
-            Dict {chemin_relatif_str: inode} des fichiers existants.
+            Dict {chemin_relatif_str: inode} des fichiers trouvés.
         """
-        existing = {}
-        if not directory.exists():
-            return existing
+        inodes = {}
         
-        def _scan(current: Path, rel_prefix: Path):
+        def _scan(current_dir: str, rel_prefix: str):
             try:
-                with os.scandir(current) as entries:
+                with os.scandir(current_dir) as entries:
                     for entry in entries:
-                        rel = rel_prefix / entry.name
+                        rel = f"{rel_prefix}/{entry.name}" if rel_prefix else entry.name
                         if entry.is_file(follow_symlinks=False):
                             try:
-                                # entry.stat().st_ino peut retourner 0 sur Windows via scandir
-                                # Utiliser Path.stat() qui retourne toujours le bon inode
-                                existing[str(rel)] = Path(entry.path).stat().st_ino
+                                inodes[rel] = entry.stat(follow_symlinks=False).st_ino
                             except OSError:
                                 pass
                         elif entry.is_dir(follow_symlinks=False):
-                            _scan(Path(entry.path), rel)
-            except PermissionError:
+                            _scan(entry.path, rel)
+            except (PermissionError, OSError):
                 pass
         
-        _scan(directory, Path('.'))
-        return existing
-
-    def _collect_source_files(self, source: Path) -> List[Path]:
-        """Collecte tous les fichiers source en une seule passe avec os.scandir.
-        
-        Returns:
-            Liste de Path relatifs des fichiers dans le dossier source.
-        """
-        files = []
-        
-        def _scan(current: Path, rel_prefix: Path):
-            try:
-                with os.scandir(current) as entries:
-                    for entry in entries:
-                        rel = rel_prefix / entry.name
-                        if entry.is_file(follow_symlinks=False):
-                            files.append(rel)
-                        elif entry.is_dir(follow_symlinks=False):
-                            _scan(Path(entry.path), rel)
-            except PermissionError:
-                pass
-        
-        _scan(source, Path('.'))
-        return files
+        _scan(directory, "")
+        return inodes
 
     def create_hardlink(self, source_path: str, destination_path: str) -> Tuple[bool, str]:
         """Crée un hardlink entre la source et la destination.
@@ -350,9 +337,9 @@ class FileService:
         Pour les fichiers: crée un hardlink direct.
         Pour les dossiers: crée l'arborescence et hardlink chaque fichier.
         
-        Optimisé pour les dossiers de séries : pré-indexe les inodes existants
-        en une seule passe (os.scandir) pour éviter les appels exists()/stat()
-        répétés par fichier.
+        Optimisé pour NFS : utilise entry.stat() natif (cache noyau), pré-indexe
+        les inodes source ET destination en une seule passe, et utilise des strings
+        au lieu de Path pour éviter l'overhead de construction d'objets.
         
         Args:
             source_path: Chemin du fichier/dossier source
@@ -361,13 +348,25 @@ class FileService:
         Returns:
             Tuple (success, message)
         """
+        t_start = time.monotonic()
         try:
             source = Path(source_path)
             destination = Path(destination_path)
             
-            # Validation des chemins
-            error = self._validate_hardlink_paths(source, destination)
+            # Résoudre les paths UNE SEULE FOIS (lent sur NFS)
+            t0 = time.monotonic()
+            source_resolved = source.resolve()
+            destination_resolved = destination.resolve()
+            t_resolve = time.monotonic() - t0
+            
+            # Validation des chemins (utilise les paths déjà résolus)
+            t0 = time.monotonic()
+            error = self._validate_hardlink_paths(source, destination,
+                                                   source_resolved, destination_resolved)
+            t_validate = time.monotonic() - t0
             if error:
+                logger.info("[PERF] hardlink REJECTED in %.2fs (resolve=%.2fs, validate=%.2fs): %s",
+                           time.monotonic() - t_start, t_resolve, t_validate, error)
                 return False, error
             
             # Créer le dossier parent de destination s'il n'existe pas
@@ -378,10 +377,10 @@ class FileService:
             
             # === CAS FICHIER ===
             if source.is_file():
-                # Vérifier si la destination existe déjà
                 if destination.exists():
                     try:
                         if destination.stat().st_ino == source.stat().st_ino:
+                            logger.info("[PERF] hardlink file ALREADY EXISTS in %.2fs", time.monotonic() - t_start)
                             return True, f"Hardlink déjà existant: {destination_path}"
                     except Exception:
                         pass
@@ -389,6 +388,7 @@ class FileService:
                 
                 try:
                     os.link(source, destination)
+                    logger.info("[PERF] hardlink file CREATED in %.2fs", time.monotonic() - t_start)
                     return True, f"Hardlink créé: {destination_path}"
                 except OSError as e:
                     if e.errno == 18:  # EXDEV - Cross-device link
@@ -403,60 +403,75 @@ class FileService:
                 try:
                     destination.mkdir(parents=True, exist_ok=True)
                     
-                    # Phase 1: Collecter tous les fichiers source en une passe
-                    source_files = self._collect_source_files(source)
-                    total_files = len(source_files)
+                    # Phase 1: Scanner source → {rel_path: inode}
+                    t0 = time.monotonic()
+                    source_inodes = self._scan_inodes(source_path)
+                    total_files = len(source_inodes)
+                    t_scan_source = time.monotonic() - t0
                     
                     if total_files == 0:
+                        logger.info("[PERF] hardlink dir EMPTY in %.2fs", time.monotonic() - t_start)
                         return True, "Dossier vide, rien à traiter"
                     
-                    # Phase 2: Indexer les fichiers existants à la destination (1 seule passe)
-                    existing_inodes = self._build_existing_inodes(destination)
+                    # Phase 2: Scanner destination → {rel_path: inode}
+                    t0 = time.monotonic()
+                    existing_inodes = self._scan_inodes(destination_path)
+                    t_scan_dest = time.monotonic() - t0
                     
-                    # Phase 3: Créer les sous-dossiers nécessaires en batch
+                    # Phase 3: Créer les sous-dossiers nécessaires
+                    t0 = time.monotonic()
                     needed_dirs = set()
-                    for rel_path in source_files:
-                        parent = rel_path.parent
-                        if str(parent) != '.':
-                            needed_dirs.add(parent)
+                    for rel_path_str in source_inodes:
+                        last_slash = rel_path_str.rfind('/')
+                        if last_slash > 0:
+                            needed_dirs.add(rel_path_str[:last_slash])
                     
                     for dir_path in sorted(needed_dirs):
-                        (destination / dir_path).mkdir(parents=True, exist_ok=True)
+                        try:
+                            os.makedirs(os.path.join(destination_path, dir_path), exist_ok=True)
+                        except FileExistsError:
+                            pass
+                    t_mkdir = time.monotonic() - t0
                     
                     # Phase 4: Créer les hardlinks
+                    t0 = time.monotonic()
                     linked_count = 0
                     skipped_count = 0
                     error_count = 0
                     errors = []
                     
-                    for rel_path in source_files:
-                        rel_str = str(rel_path)
-                        source_file = source / rel_path
-                        dest_file = destination / rel_path
-                        
+                    for rel_str, source_ino in source_inodes.items():
                         # Vérifier via l'index si le fichier existe déjà
-                        if rel_str in existing_inodes:
-                            existing_ino = existing_inodes[rel_str]
-                            try:
-                                source_ino = source_file.stat().st_ino
-                                if existing_ino == source_ino:
-                                    skipped_count += 1  # Déjà hardlinké
-                                    continue
-                                else:
-                                    skipped_count += 1  # Fichier différent, on skip
-                                    continue
-                            except OSError:
-                                skipped_count += 1
-                                continue
+                        existing_ino = existing_inodes.get(rel_str)
+                        if existing_ino is not None:
+                            if existing_ino == source_ino:
+                                skipped_count += 1  # Déjà hardlinké (même inode)
+                            else:
+                                skipped_count += 1  # Fichier différent, on skip
+                            continue
                         
-                        # Créer le hardlink
+                        # Créer le hardlink (utilise os.link avec des strings, pas des Path)
+                        src = os.path.join(source_path, rel_str)
+                        dst = os.path.join(destination_path, rel_str)
                         try:
-                            os.link(source_file, dest_file)
+                            os.link(src, dst)
                             linked_count += 1
                         except OSError as e:
                             error_count += 1
-                            if len(errors) < 3:  # Limiter les messages d'erreur
-                                errors.append(f"{rel_path}: {e}")
+                            if len(errors) < 3:
+                                errors.append(f"{rel_str}: {e}")
+                    t_link = time.monotonic() - t0
+                    
+                    t_total = time.monotonic() - t_start
+                    logger.info(
+                        "[PERF] hardlink dir (%d files) in %.2fs: "
+                        "resolve=%.2fs, validate=%.2fs, scan_src=%.2fs, scan_dst=%.2fs, "
+                        "mkdir=%.2fs, link=%.2fs | linked=%d skipped=%d errors=%d",
+                        total_files, t_total,
+                        t_resolve, t_validate, t_scan_source, t_scan_dest,
+                        t_mkdir, t_link,
+                        linked_count, skipped_count, error_count
+                    )
                     
                     # Construire le message de résultat
                     messages = []

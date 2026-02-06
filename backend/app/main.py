@@ -1,6 +1,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 import os
+
+# Configuration logging applicatif
+# Uvicorn configure son propre logger mais pas le root logger Python.
+# Sans ceci, les logger.info() des services sont silencieusement ignorés.
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.INFO),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 from .routers import (
     files_router,

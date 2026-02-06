@@ -6,6 +6,10 @@ from ..config import user_settings, settings
 
 
 class QBittorrentService:
+    MEDIA_EXTENSIONS = {
+        '.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.m2ts'
+    }
+
     def __init__(self):
         self._client = None
     
@@ -63,16 +67,14 @@ class QBittorrentService:
             
             if source.is_file():
                 source_ext = source.suffix
-                base_name = name or source.stem
-                if name and source_ext and name.lower().endswith(source_ext.lower()):
-                    base_name = name[: -len(source_ext)]
+                base_name = self._strip_media_extension(name or source.stem, source_ext)
                 torrent_name = base_name
                 content_name = base_name
                 if source_ext:
                     content_name = f"{content_name}{source_ext}"
             else:
                 content_name = name or source.name
-                torrent_name = name or source.name
+                torrent_name = self._strip_media_extension(name or source.name)
             
             t = torf.Torrent(path=source_path)
             t.name = content_name
@@ -101,6 +103,17 @@ class QBittorrentService:
             }
         except Exception as e:
             return False, {"error": str(e)}
+
+    def _strip_media_extension(self, value: str, source_ext: str = "") -> str:
+        if not value:
+            return value
+        lower_value = value.lower()
+        if source_ext and lower_value.endswith(source_ext.lower()):
+            return value[: -len(source_ext)]
+        for ext in self.MEDIA_EXTENSIONS:
+            if lower_value.endswith(ext):
+                return value[: -len(ext)]
+        return value
     
     def add_torrent_for_seeding(self, torrent_path: str, 
                                  content_path: str,

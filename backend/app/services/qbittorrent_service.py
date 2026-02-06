@@ -63,10 +63,13 @@ class QBittorrentService:
             
             if source.is_file():
                 source_ext = source.suffix
-                content_name = name or source.name
-                if source_ext and not content_name.lower().endswith(source_ext.lower()):
+                base_name = name or source.stem
+                if name and source_ext and name.lower().endswith(source_ext.lower()):
+                    base_name = name[: -len(source_ext)]
+                torrent_name = base_name
+                content_name = base_name
+                if source_ext:
                     content_name = f"{content_name}{source_ext}"
-                torrent_name = name or source.stem
             else:
                 content_name = name or source.name
                 torrent_name = name or source.name

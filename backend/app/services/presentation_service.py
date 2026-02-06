@@ -1,6 +1,9 @@
+import logging
 from pathlib import Path
 from typing import Optional
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class PresentationService:
@@ -78,7 +81,7 @@ class PresentationService:
             self.template = template
             return True
         except Exception as e:
-            print(f"Erreur sauvegarde template: {e}")
+            logger.error("Erreur sauvegarde template: %s", e, exc_info=True)
             return False
 
 

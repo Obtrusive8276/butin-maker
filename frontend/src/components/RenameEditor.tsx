@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowRight, ArrowLeft, Loader2, Copy, Check, RefreshCw, Link2 } from 'lucide-react';
 import { tmdbApi, mediainfoApi } from '../services/api';
@@ -80,17 +80,36 @@ export default function RenameEditor() {
   });
 
   useEffect(() => {
-    // Réinitialiser hasGenerated quand on change de fichier ou de langue manuelle
+    // Réinitialiser les options quand on change de fichier
+    setLanguage('');
+    setSource('');
+    setEdition('');
+    setInfo('');
     setHasGenerated(false);
-  }, [selectedItem?.path, language]);
+  }, [selectedItem?.path]);
 
-  useEffect(() => {
-    // Ne générer que si on a les infos nécessaires et si ce n'est pas déjà fait
-    if (selectedItem && mediaInfo && tmdbInfo && !hasGenerated) {
-      setHasGenerated(true);
+  // Handler mémorisé pour la génération du nom de release
+  const handleGenerateName = useCallback(() => {
+    if (selectedItem && mediaInfo && tmdbInfo) {
       generateNameMutation.mutate();
     }
-  }, [selectedItem?.path, mediaInfo, tmdbInfo, hasGenerated]);
+  }, [selectedItem, mediaInfo, tmdbInfo, source, edition, info, language, generateNameMutation]);
+
+  // Effet pour la génération automatique au premier chargement
+  useEffect(() => {
+    if (!hasGenerated && selectedItem && mediaInfo && tmdbInfo) {
+      setHasGenerated(true);
+      handleGenerateName();
+    }
+  }, [hasGenerated, selectedItem?.path, mediaInfo, tmdbInfo, handleGenerateName]);
+
+  // Effet pour régénérer automatiquement quand les options changent
+  useEffect(() => {
+    if (hasGenerated) {
+      // Seulement si on a déjà généré une fois
+      handleGenerateName();
+    }
+  }, [source, edition, info, language, handleGenerateName]);
 
   const handleCopy = () => {
     copyReleaseName(releaseName);
@@ -209,9 +228,9 @@ export default function RenameEditor() {
         </div>
 
         <button
-          onClick={() => generateNameMutation.mutate()}
+          onClick={handleGenerateName}
           disabled={generateNameMutation.isPending}
-          className="mt-4 flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+          className="mt-4 flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {generateNameMutation.isPending ? (
             <Loader2 className="w-4 h-4 animate-spin" />

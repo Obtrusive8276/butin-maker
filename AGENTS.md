@@ -804,5 +804,56 @@ Utilisée dans : `MediaInfoViewer.tsx`, `Finalize.tsx`
 ### Frontend - Basse priorité
 
 - [x] **Texte - `SettingsModal.tsx`** : Texte d'aide du champ "Dossier de sortie" est un copier-coller du champ hardlink
-- [ ] **Dead code - `api.ts`** : `renameFile` défini mais jamais appelé
+- [x] **Dead code - `api.ts`** : `renameFile` défini mais jamais appelé
 - [x] **Debug - `RenameEditor.tsx`** : `console.log` laissés en production
+
+---
+
+## 🚨 TODO - Corrections Critiques (2026-02-06)
+
+### ✅ Tous les problèmes critiques ont été corrigés ! (2026-02-06)
+
+#### ✅ RÉSOLU - XSS via dangerouslySetInnerHTML
+**Fichier**: `frontend/src/components/Finalize.tsx:478, 611`  
+**Problème**: Utilisation de `dangerouslySetInnerHTML` avec HTML généré depuis du BBCode sans DOMPurify  
+**Impact**: Injection JavaScript, vol de cookies/session, redirection vers sites malveillants  
+**Solution appliquée**:
+- ✅ `dompurify` et `@types/dompurify` installés
+- ✅ `DOMPurify.sanitize()` ajouté aux 2 usages de `dangerouslySetInnerHTML`
+- ✅ Protection complète contre les injections XSS
+
+#### ✅ RÉSOLU - Anti-pattern useEffect + mutate
+**Fichier**: `frontend/src/components/RenameEditor.tsx:87-93`  
+**Problème**: Appel de mutation API dans useEffect avec gestion d'état complexe  
+**Impact**: Boucle infinie potentielle, rendus inutiles, comportement imprévisible  
+**Solution appliquée**:
+- ✅ Refactorisation complète avec `useCallback` pour la génération
+- ✅ Toutes les dépendances ajoutées : `source`, `edition`, `info`, `language`
+- ✅ **Régénération automatique restaurée** : changement d'options → mise à jour automatique du nom
+- ✅ Protection contre les boucles infinies avec flag `hasGenerated`
+
+#### ✅ RÉSOLU - Logger manquant
+**Fichier**: `backend/app/services/presentation_service.py:81`  
+**Problème**: Utilisation de `print()` au lieu de `logging`  
+**Impact**: Logs perdus en production, pas de niveau de sévérité  
+**Solution appliquée**:
+- ✅ Import du module `logging`
+- ✅ Création du logger : `logger = logging.getLogger(__name__)`
+- ✅ Remplacement de `print()` par `logger.error()` avec `exc_info=True`
+
+#### ✅ RÉSOLU - Port invalide par défaut
+**Fichier**: `frontend/src/components/SettingsModal.tsx:110`  
+**Problème**: `parseInt(e.target.value) || 0` retourne 0 si champ vide  
+**Impact**: Port 0 invalide, connexion qBittorrent impossible  
+**Solution appliquée**:
+- ✅ Changement de `|| 0` en `|| 8080`
+- ✅ Port par défaut valide restauré
+
+#### ✅ RÉSOLU - Code mort
+**Fichier**: `frontend/src/services/api.ts:302-313`  
+**Problème**: Fonction `renameFile` définie mais jamais appelée  
+**Impact**: Confusion, maintenance inutile  
+**Solution appliquée**:
+- ✅ Fonction `renameFile` supprimée (12 lignes)
+- ✅ Code nettoyé et maintenu
+

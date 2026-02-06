@@ -298,19 +298,6 @@ export const tmdbApi = {
     const response = await api.get(`/tmdb/search-from-filename?${params}`);
     return response.data;
   },
-
-  renameFile: async (
-    sourcePath: string,
-    newName: string,
-    dryRun: boolean = true
-  ): Promise<{ success: boolean; old_path?: string; new_path?: string; error?: string }> => {
-    const response = await api.post('/tmdb/rename', {
-      source_path: sourcePath,
-      new_name: newName,
-      dry_run: dryRun
-    });
-    return response.data;
-  },
 };
 
 export default api;

@@ -107,7 +107,7 @@ export default function SettingsModal() {
                   value={formData.qbittorrent.port}
                   onChange={(e) => setFormData({
                     ...formData,
-                    qbittorrent: { ...formData.qbittorrent, port: parseInt(e.target.value) || 0 }
+                    qbittorrent: { ...formData.qbittorrent, port: parseInt(e.target.value) || 8080 }
                   })}
                   className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                   placeholder="8080"

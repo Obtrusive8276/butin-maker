@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Download, Copy, Check, ExternalLink, FileText, File, Tags, Eye, X, Play, Loader2 } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
 import { torrentApi, mediainfoApi, tagsApi, presentationApi } from '../services/api';
 import { useClipboard } from '../hooks/useClipboard';
@@ -32,6 +33,40 @@ export default function Finalize() {
   const [nfoContent, setNfoContent] = useState<string | null>(null);
   const [seedingStatus, setSeedingStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [seedingMessage, setSeedingMessage] = useState('');
+
+  // Fonction de sanitization sécurisée avec DOMPurify
+  const sanitizeHtml = (html: string): string => {
+    // Ajouter un hook pour filtrer les attributs dangereux
+    DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+      // Filtrer les src avec data:, blob:, etc.
+      if (node.hasAttribute('src')) {
+        const src = node.getAttribute('src') || '';
+        if (!src.match(/^https?:\/\//i) && !src.match(/^ftp:\/\//i)) {
+          node.removeAttribute('src');
+        }
+      }
+      // Filtrer les styles avec url() malveillants
+      if (node.hasAttribute('style')) {
+        const style = node.getAttribute('style') || '';
+        if (style.includes('url(') && !style.match(/url\s*\(\s*['"]?https?:\/\//i)) {
+          // Retirer les url() qui ne sont pas HTTP(S)
+          const cleanStyle = style.replace(/url\s*\([^)]*\)/gi, '');
+          node.setAttribute('style', cleanStyle);
+        }
+      }
+    });
+
+    const sanitized = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['div', 'span', 'strong', 'em', 'u', 's', 'a', 'img', 'blockquote', 'pre', 'code', 'ul', 'li', 'hr', 'br'],
+      ALLOWED_ATTR: ['style', 'href', 'target', 'rel', 'src', 'width', 'height'],
+      ALLOWED_URI_REGEXP: /^(?:(?:https?|ftp):\/\/)/i,
+    });
+
+    // Nettoyer les hooks pour éviter les effets de bord
+    DOMPurify.removeAllHooks();
+
+    return sanitized;
+  };
 
   // Convertir BBCode en HTML pour l'aperçu
   const bbcodeToHtml = (bbcode: string): string => {
@@ -475,7 +510,7 @@ export default function Finalize() {
             showBBCodePreview ? (
               <div 
                 className="bg-gray-900 p-4 rounded max-h-96 overflow-auto prose prose-invert prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: bbcodeToHtml(generatedBBCode) }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(bbcodeToHtml(generatedBBCode)) }}
               />
             ) : (
               <textarea
@@ -608,7 +643,7 @@ export default function Finalize() {
             </div>
             <div 
               className="p-6 overflow-auto flex-1 text-sm leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: bbcodeToHtml(generatedBBCode) }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(bbcodeToHtml(generatedBBCode)) }}
             />
           </div>
         </div>

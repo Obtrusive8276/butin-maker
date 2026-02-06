@@ -92,6 +92,10 @@ frontend/.vite/
 backend/data/settings.json
 backend/output/
 
+# Test files (temporary)
+frontend/test-dompurify.mjs
+frontend/test-xss.html
+
 # Temporary files
 *.tmp
 *.temp

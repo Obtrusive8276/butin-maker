@@ -135,10 +135,15 @@ class QBittorrentService:
                 content = Path(content_path)
                 save_path = str(content.parent) if content.is_file() else str(content.parent)
             
+            # Extraire le nom sans extension media pour l'affichage dans qBittorrent
+            torrent_display_name = Path(torrent_path).stem  # ex: "Release.Name" (sans .torrent)
+            torrent_display_name = self._strip_media_extension(torrent_display_name)
+            
             with open(torrent_path, 'rb') as f:
                 add_params = {
                     "torrent_files": f,
-                    "is_skip_checking": False
+                    "is_skip_checking": False,
+                    "rename": torrent_display_name
                 }
                 # Ajouter save_path seulement s'il est défini
                 if save_path:

@@ -1,9 +1,13 @@
 import qbittorrentapi
 import asyncio
+import logging
+import time
 from typing import Optional, Tuple
 from pathlib import Path
 import torf
 from ..config import user_settings, settings
+
+logger = logging.getLogger(__name__)
 
 
 class QBittorrentService:
@@ -91,10 +95,21 @@ class QBittorrentService:
             if announce_url:
                 t.trackers = [[announce_url]]
             
+            t0 = time.monotonic()
             await asyncio.to_thread(t.generate)
+            t_generate = time.monotonic() - t0
             
+            t0 = time.monotonic()
             output_file = settings.output_path / f"{torrent_name}.torrent"
             t.write(output_file, overwrite=True)
+            t_write = time.monotonic() - t0
+            
+            logger.info(
+                "[PERF] torrent created in %.2fs: generate=%.2fs (hash), write=%.2fs | "
+                "name=%s size=%s pieces=%d piece_size=%s",
+                t_generate + t_write, t_generate, t_write,
+                torrent_name, t.size, t.pieces, t.piece_size
+            )
             
             return True, {
                 "torrent_path": str(output_file),

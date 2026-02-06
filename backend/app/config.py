@@ -1,10 +1,14 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from pathlib import Path
-import copy
 import json
+import logging
 import os
 from typing import Optional
+
+from .models.settings import SettingsModel
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -47,7 +51,6 @@ class Settings(BaseSettings):
     @property
     def output_path(self) -> Path:
         """Retourne le chemin pour les fichiers générés (utilise user_settings si disponible)"""
-        # Import tardif pour éviter la dépendance circulaire
         try:
             user_output = user_settings.get().get("paths", {}).get("output_path", "")
             if user_output:
@@ -61,68 +64,56 @@ settings = Settings()
 
 
 class UserSettings:
-    # Valeurs par défaut définies une seule fois
-    DEFAULTS = {
-        "qbittorrent": {
-            "host": "http://localhost",
-            "port": 8080,
-            "username": "admin",
-            "password": ""
-        },
-        "tracker": {
-            "announce_url": "",
-            "upload_url": "https://la-cale.space/upload",
-            "lacale_api_key": ""
-        },
-        "paths": {
-            "default_browse_path": "",
-            "hardlink_path": "",
-            "qbittorrent_download_path": "",
-            "output_path": ""
-        },
-        "tmdb": {
-            "api_key": "7b82b012524705130d16604a7e6b325d"
-        }
-    }
+    """Gestion des paramètres utilisateur persistés dans settings.json.
+    
+    Utilise SettingsModel (Pydantic) comme source unique de vérité pour les
+    valeurs par défaut et la validation. Le merge entre données persistées et
+    defaults est automatique via le constructeur Pydantic.
+    """
 
     def __init__(self):
         self.settings_file = settings.data_path / "settings.json"
-        self._data = self._load()
+        self._model = self._load()
     
-    def _load(self) -> dict:
+    def _load(self) -> SettingsModel:
+        """Charge le fichier JSON et le valide via Pydantic.
+        
+        Les champs manquants reçoivent automatiquement leur valeur par défaut.
+        Les champs inconnus sont ignorés silencieusement (robustesse migration).
+        """
         if self.settings_file.exists():
-            with open(self.settings_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return copy.deepcopy(self.DEFAULTS)
+            try:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                # Pydantic fusionne automatiquement avec les defaults
+                return SettingsModel(**raw)
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning("Erreur lecture settings.json, utilisation des défauts: %s", e)
+                return SettingsModel()
+        return SettingsModel()
     
     def save(self, data: dict):
-        self._data = data
+        """Sauvegarde les settings après validation Pydantic.
+        
+        Les données passées sont validées par SettingsModel avant écriture.
+        Les champs manquants sont complétés par les valeurs par défaut.
+        """
+        self._model = SettingsModel(**data)
         with open(self.settings_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            json.dump(self._model.model_dump(), f, indent=2, ensure_ascii=False)
     
     def get(self) -> dict:
-        # Fusionner les données persistées avec les valeurs par défaut
-        result = {}
-        for key, default_value in self.DEFAULTS.items():
-            if key in self._data:
-                if isinstance(default_value, dict):
-                    # Fusionner les sous-dictionnaires: utiliser le default uniquement si la clé est absente
-                    merged = {}
-                    for k, v in default_value.items():
-                        if k in self._data[key]:
-                            merged[k] = self._data[key][k]
-                        else:
-                            merged[k] = v
-                    result[key] = merged
-                else:
-                    result[key] = self._data[key]
-            else:
-                result[key] = copy.deepcopy(default_value)
-        return result
+        """Retourne les settings comme dict, toujours complet avec tous les champs."""
+        return self._model.model_dump()
     
     def update(self, key: str, value: dict):
-        self._data[key] = value
-        self.save(self._data)
+        """Met à jour une section spécifique des settings.
+        
+        Fusionne la nouvelle valeur dans le modèle existant avant sauvegarde.
+        """
+        current = self._model.model_dump()
+        current[key] = value
+        self.save(current)
 
 
 user_settings = UserSettings()

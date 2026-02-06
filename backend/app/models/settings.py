@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
 
 
 class QBittorrentSettings(BaseModel):
@@ -11,7 +10,8 @@ class QBittorrentSettings(BaseModel):
 
 class TrackerSettings(BaseModel):
     announce_url: str = ""
-    upload_url: str = ""
+    upload_url: str = "https://la-cale.space/upload"
+    lacale_api_key: str = ""
 
 
 class PathSettings(BaseModel):

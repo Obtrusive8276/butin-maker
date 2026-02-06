@@ -31,6 +31,8 @@ Dockerfile
 coverage
 *.test.ts
 *.test.tsx
+tests
+vitest.config.ts
 
 # Logs
 logs

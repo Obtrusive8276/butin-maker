@@ -93,7 +93,8 @@ export default function RenameEditor() {
     if (selectedItem && mediaInfo && tmdbInfo) {
       generateNameMutation.mutate();
     }
-  }, [selectedItem, mediaInfo, tmdbInfo, source, edition, info, language, generateNameMutation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItem?.path, mediaInfo, tmdbInfo, source, edition, info, language]);
 
   // Effet pour la génération automatique au premier chargement
   useEffect(() => {
@@ -101,15 +102,16 @@ export default function RenameEditor() {
       setHasGenerated(true);
       handleGenerateName();
     }
-  }, [hasGenerated, selectedItem?.path, mediaInfo, tmdbInfo, handleGenerateName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasGenerated, selectedItem?.path, mediaInfo, tmdbInfo]);
 
   // Effet pour régénérer automatiquement quand les options changent
   useEffect(() => {
     if (hasGenerated) {
-      // Seulement si on a déjà généré une fois
       handleGenerateName();
     }
-  }, [source, edition, info, language, handleGenerateName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, edition, info, language]);
 
   const handleCopy = () => {
     copyReleaseName(releaseName);

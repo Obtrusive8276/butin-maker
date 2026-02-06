@@ -1,130 +1,333 @@
 """
-Test pour vérifier le comportement des hardlinks quand le fichier existe déjà
+Tests pour la création de hardlinks (fichiers et dossiers).
+Couvre les optimisations de performance pour les dossiers de séries.
 """
 import os
 import tempfile
-import shutil
 from pathlib import Path
+from unittest.mock import patch
 
-# Simuler la logique create_hardlink pour tester
-def create_hardlink(source_path: str, destination_path: str):
-    """Version simplifiée de create_hardlink pour les tests"""
-    try:
-        source = Path(source_path)
-        destination = Path(destination_path)
-        
-        if not source.exists():
-            return False, f"La source n'existe pas: {source_path}"
-        
-        # Créer le dossier parent
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Vérifier si la destination existe déjà
-        if destination.exists():
-            # Vérifier si c'est déjà un hardlink vers la même source
-            if destination.is_file():
-                try:
-                    if destination.stat().st_ino == source.stat().st_ino:
-                        # Même inode = même fichier (déjà hardlinké)
-                        return True, f"Hardlink déjà existant: {destination_path}"
-                except:
-                    pass
-            return False, f"La destination existe déjà: {destination_path}"
-        
-        # Créer le hardlink
-        if source.is_file():
-            try:
-                os.link(source, destination)
-                return True, f"Hardlink créé: {destination_path}"
-            except OSError as e:
-                return False, f"Erreur: {str(e)}"
-        
-        return False, "Type non supporté"
-        
-    except Exception as e:
-        return False, f"Erreur: {str(e)}"
+import pytest
+
+from app.services.file_service import FileService
 
 
-def test_hardlink_already_exists():
-    """Test: Si le hardlink existe déjà, on retourne succès avec message approprié"""
+@pytest.fixture
+def file_service():
+    """FileService avec un media_root temporaire."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Créer un fichier source
-        source = Path(tmpdir) / "source.txt"
-        source.write_text("contenu test")
-        
-        # Créer le hardlink une première fois
-        dest = Path(tmpdir) / "dest.txt"
-        success1, msg1 = create_hardlink(str(source), str(dest))
-        print(f"1ère création: {success1} - {msg1}")
-        assert success1, f"La première création devrait réussir: {msg1}"
-        
-        # Vérifier que c'est bien un hardlink (même inode)
-        assert source.stat().st_ino == dest.stat().st_ino, "Devrait être le même inode"
-        
-        # Essayer de créer le même hardlink une deuxième fois
-        success2, msg2 = create_hardlink(str(source), str(dest))
-        print(f"2ème création: {success2} - {msg2}")
-        assert success2, f"La deuxième création devrait aussi réussir (déjà existant): {msg2}"
-        assert "déjà existant" in msg2.lower(), f"Le message devrait indiquer que ça existe déjà: {msg2}"
-        
-        print("✅ Test réussi: Les hardlinks déjà existants sont correctement gérés")
+        svc = FileService()
+        svc.media_root = Path(tmpdir)
+        yield svc, Path(tmpdir)
 
 
-def test_different_file_exists():
-    """Test: Si un fichier différent existe à la destination, on retourne une erreur"""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Créer deux fichiers différents
-        source = Path(tmpdir) / "source.txt"
-        source.write_text("contenu source")
-        
-        other = Path(tmpdir) / "other.txt"
-        other.write_text("contenu différent")
-        
-        # Renommer other.txt en dest.txt
-        dest = Path(tmpdir) / "dest.txt"
-        other.rename(dest)
-        
-        # Essayer de créer le hardlink - devrait échouer car fichier différent existe
-        success, msg = create_hardlink(str(source), str(dest))
-        print(f"Création sur fichier existant différent: {success} - {msg}")
-        assert not success, "Devrait échouer car un fichier différent existe"
-        assert "existe déjà" in msg.lower(), f"Message devrait indiquer l'existence: {msg}"
-        
-        print("✅ Test réussi: Les fichiers différents existants bloquent correctement")
+@pytest.fixture
+def mock_hardlink_path(file_service):
+    """Configure hardlink_path dans les settings mock."""
+    svc, tmpdir = file_service
+    hardlink_dir = tmpdir / "hardlinks"
+    hardlink_dir.mkdir()
+    settings_data = {
+        "paths": {"hardlink_path": str(hardlink_dir)},
+    }
+    with patch("app.config.user_settings") as mock_us:
+            mock_us.get.return_value = settings_data
+            yield svc, tmpdir, hardlink_dir
 
 
-def test_directory_with_existing_files():
-    """Test: Pour les dossiers, skip les fichiers déjà existants"""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Créer un dossier source avec des fichiers
-        source_dir = Path(tmpdir) / "source"
-        source_dir.mkdir()
-        
-        (source_dir / "file1.txt").write_text("content1")
-        (source_dir / "file2.txt").write_text("content2")
-        
-        dest_dir = Path(tmpdir) / "dest"
-        
-        # Première création
-        # Note: Cette version simplifiée ne gère pas les dossiers, 
-        # mais le vrai code le fait
-        
-        print("✅ Test des dossiers: Voir l'implémentation complète dans file_service.py")
+# ============================================================
+# Tests fichier unique
+# ============================================================
+
+class TestHardlinkFile:
+    def test_hardlink_file_success(self, file_service):
+        svc, tmpdir = file_service
+        source = tmpdir / "movie.mkv"
+        source.write_bytes(b"fake video data")
+        dest = tmpdir / "dest" / "Movie.2024.mkv"
+
+        with patch("app.config.user_settings") as mock_us:
+            mock_us.get.return_value = {"paths": {"hardlink_path": ""}}
+            success, msg = svc.create_hardlink(str(source), str(dest))
+
+        assert success
+        assert "créé" in msg
+        assert dest.exists()
+        assert source.stat().st_ino == dest.stat().st_ino
+
+    def test_hardlink_file_already_exists_same_inode(self, file_service):
+        svc, tmpdir = file_service
+        source = tmpdir / "movie.mkv"
+        source.write_bytes(b"fake video data")
+        dest = tmpdir / "Movie.2024.mkv"
+        os.link(source, dest)
+
+        with patch("app.config.user_settings") as mock_us:
+            mock_us.get.return_value = {"paths": {"hardlink_path": ""}}
+            success, msg = svc.create_hardlink(str(source), str(dest))
+
+        assert success
+        assert "déjà existant" in msg.lower()
+
+    def test_hardlink_file_different_file_exists(self, file_service):
+        svc, tmpdir = file_service
+        source = tmpdir / "movie.mkv"
+        source.write_bytes(b"source content")
+        dest = tmpdir / "Movie.2024.mkv"
+        dest.write_bytes(b"different content")
+
+        with patch("app.config.user_settings") as mock_us:
+            mock_us.get.return_value = {"paths": {"hardlink_path": ""}}
+            success, msg = svc.create_hardlink(str(source), str(dest))
+
+        assert not success
+        assert "existe déjà" in msg.lower()
+
+    def test_hardlink_source_not_exists(self, file_service):
+        svc, tmpdir = file_service
+        success, msg = svc.create_hardlink(
+            str(tmpdir / "nonexistent.mkv"),
+            str(tmpdir / "dest.mkv")
+        )
+        assert not success
+        assert "n'existe pas" in msg
+
+    def test_hardlink_source_outside_media_root(self, file_service):
+        svc, tmpdir = file_service
+        with tempfile.TemporaryDirectory() as other_dir:
+            source = Path(other_dir) / "movie.mkv"
+            source.write_bytes(b"data")
+            success, msg = svc.create_hardlink(
+                str(source),
+                str(tmpdir / "dest.mkv")
+            )
+        assert not success
+        assert "accès refusé" in msg.lower()
 
 
-if __name__ == "__main__":
-    print("=" * 60)
-    print("Test 1: Hardlink déjà existant")
-    print("=" * 60)
-    test_hardlink_already_exists()
-    print()
-    
-    print("=" * 60)
-    print("Test 2: Fichier différent existe")
-    print("=" * 60)
-    test_different_file_exists()
-    print()
-    
-    print("=" * 60)
-    print("Tous les tests ont réussi!")
-    print("=" * 60)
+# ============================================================
+# Tests dossier (séries)
+# ============================================================
+
+class TestHardlinkDirectory:
+    def _create_series(self, tmpdir: Path, name: str, episode_count: int) -> Path:
+        """Crée un dossier de série avec N épisodes."""
+        series_dir = tmpdir / name
+        series_dir.mkdir()
+        for i in range(1, episode_count + 1):
+            ep = series_dir / f"{name}.S01E{i:02d}.mkv"
+            ep.write_bytes(f"episode {i}".encode())
+        return series_dir
+
+    def test_hardlink_directory_success(self, file_service):
+        svc, tmpdir = file_service
+        source = self._create_series(tmpdir, "MyShow", 5)
+        dest = tmpdir / "MyShow.S01.MULTi.1080p"
+
+        with patch("app.config.user_settings") as mock_us:
+            mock_us.get.return_value = {"paths": {"hardlink_path": ""}}
+            success, msg = svc.create_hardlink(str(source), str(dest))
+
+        assert success
+        assert "5 hardlinks créés" in msg
+        assert "5 fichiers" in msg
+
+        # Vérifier que chaque fichier est un hardlink (même inode)
+        for i in range(1, 6):
+            src_file = source / f"MyShow.S01E{i:02d}.mkv"
+            dst_file = dest / f"MyShow.S01E{i:02d}.mkv"
+            assert dst_file.exists()
+            assert src_file.stat().st_ino == dst_file.stat().st_ino
+
+    def test_hardlink_directory_already_linked(self, file_service):
+        """Re-exécuter sur un dossier déjà hardlinké = tous skippés."""
+        svc, tmpdir = file_service
+        source = self._create_series(tmpdir, "MyShow", 3)
+        dest = tmpdir / "MyShow.S01"
+
+        with patch("app.config.user_settings") as mock_us:
+            mock_us.get.return_value = {"paths": {"hardlink_path": ""}}
+
+            # Premier appel
+            success1, msg1 = svc.create_hardlink(str(source), str(dest))
+            assert success1
+            assert "3 hardlinks créés" in msg1
+
+            # Deuxième appel - tout est déjà linké
+            success2, msg2 = svc.create_hardlink(str(source), str(dest))
+            assert success2
+            assert "3 fichiers déjà existants ignorés" in msg2
+            assert "hardlinks créés" not in msg2
+
+    def test_hardlink_directory_partial(self, file_service):
+        """Dossier avec certains fichiers déjà existants."""
+        svc, tmpdir = file_service
+        source = self._create_series(tmpdir, "MyShow", 5)
+        dest = tmpdir / "MyShow.S01"
+        dest.mkdir()
+
+        # Hardlinker les 3 premiers épisodes manuellement
+        for i in range(1, 4):
+            src = source / f"MyShow.S01E{i:02d}.mkv"
+            dst = dest / f"MyShow.S01E{i:02d}.mkv"
+            os.link(src, dst)
+
+        with patch("app.config.user_settings") as mock_us:
+            mock_us.get.return_value = {"paths": {"hardlink_path": ""}}
+            success, msg = svc.create_hardlink(str(source), str(dest))
+
+        assert success
+        assert "2 hardlinks créés" in msg
+        assert "3 fichiers déjà existants ignorés" in msg
+
+    def test_hardlink_directory_with_subdirs(self, file_service):
+        """Dossier avec sous-dossiers (ex: Season 01/Episode 01.mkv)."""
+        svc, tmpdir = file_service
+        source = tmpdir / "MyShow"
+        source.mkdir()
+        s01 = source / "Season 01"
+        s01.mkdir()
+        (s01 / "ep01.mkv").write_bytes(b"ep1")
+        (s01 / "ep02.mkv").write_bytes(b"ep2")
+        s02 = source / "Season 02"
+        s02.mkdir()
+        (s02 / "ep01.mkv").write_bytes(b"ep1s2")
+
+        dest = tmpdir / "MyShow.INTEGRALE"
+
+        with patch("app.config.user_settings") as mock_us:
+            mock_us.get.return_value = {"paths": {"hardlink_path": ""}}
+            success, msg = svc.create_hardlink(str(source), str(dest))
+
+        assert success
+        assert "3 hardlinks créés" in msg
+        assert (dest / "Season 01" / "ep01.mkv").exists()
+        assert (dest / "Season 02" / "ep01.mkv").exists()
+
+    def test_hardlink_directory_empty(self, file_service):
+        """Dossier vide."""
+        svc, tmpdir = file_service
+        source = tmpdir / "EmptyDir"
+        source.mkdir()
+        dest = tmpdir / "EmptyDest"
+
+        with patch("app.config.user_settings") as mock_us:
+            mock_us.get.return_value = {"paths": {"hardlink_path": ""}}
+            success, msg = svc.create_hardlink(str(source), str(dest))
+
+        assert success
+        assert "vide" in msg.lower()
+
+    def test_hardlink_no_fallback_copy(self, file_service):
+        """Vérifie qu'il n'y a PAS de fallback shutil.copy2 (jamais de copie silencieuse)."""
+        svc, tmpdir = file_service
+        source = self._create_series(tmpdir, "MyShow", 2)
+        dest = tmpdir / "Dest"
+
+        with patch("app.config.user_settings") as mock_us, \
+             patch("os.link", side_effect=OSError(18, "Cross-device link")):
+            mock_us.get.return_value = {"paths": {"hardlink_path": ""}}
+            success, msg = svc.create_hardlink(str(source), str(dest))
+
+        # Doit retourner avec des erreurs, PAS copier silencieusement
+        assert "2 erreurs" in msg
+        # Aucun fichier ne doit avoir été créé par copie
+        dest_files = list(dest.rglob("*.mkv"))
+        assert len(dest_files) == 0
+
+
+# ============================================================
+# Tests méthodes internes (performance)
+# ============================================================
+
+class TestHardlinkInternals:
+    def test_build_existing_inodes(self, file_service):
+        """_build_existing_inodes indexe correctement les fichiers."""
+        svc, tmpdir = file_service
+        test_dir = tmpdir / "indexed"
+        test_dir.mkdir()
+        f1 = test_dir / "file1.mkv"
+        f1.write_bytes(b"content1")
+        sub = test_dir / "sub"
+        sub.mkdir()
+        f2 = sub / "file2.mkv"
+        f2.write_bytes(b"content2")
+
+        inodes = svc._build_existing_inodes(test_dir)
+
+        assert "file1.mkv" in inodes
+        assert str(Path("sub") / "file2.mkv") in inodes
+        assert inodes["file1.mkv"] == f1.stat().st_ino
+        assert len(inodes) == 2
+
+    def test_build_existing_inodes_empty_dir(self, file_service):
+        svc, tmpdir = file_service
+        test_dir = tmpdir / "empty"
+        test_dir.mkdir()
+
+        inodes = svc._build_existing_inodes(test_dir)
+        assert len(inodes) == 0
+
+    def test_build_existing_inodes_nonexistent(self, file_service):
+        svc, tmpdir = file_service
+
+        inodes = svc._build_existing_inodes(tmpdir / "does_not_exist")
+        assert len(inodes) == 0
+
+    def test_collect_source_files(self, file_service):
+        """_collect_source_files liste tous les fichiers récursivement."""
+        svc, tmpdir = file_service
+        source = tmpdir / "show"
+        source.mkdir()
+        (source / "ep01.mkv").write_bytes(b"1")
+        (source / "ep02.mkv").write_bytes(b"2")
+        sub = source / "extras"
+        sub.mkdir()
+        (sub / "behind.mkv").write_bytes(b"3")
+
+        files = svc._collect_source_files(source)
+
+        names = sorted([str(f) for f in files])
+        assert len(names) == 3
+        assert "ep01.mkv" in names
+        assert "ep02.mkv" in names
+        assert str(Path("extras") / "behind.mkv") in names
+
+    def test_collect_source_files_empty(self, file_service):
+        svc, tmpdir = file_service
+        source = tmpdir / "empty"
+        source.mkdir()
+
+        files = svc._collect_source_files(source)
+        assert len(files) == 0
+
+
+# ============================================================
+# Tests sécurité
+# ============================================================
+
+class TestHardlinkSecurity:
+    def test_destination_outside_hardlink_path(self, mock_hardlink_path):
+        svc, tmpdir, hardlink_dir = mock_hardlink_path
+        source = tmpdir / "movie.mkv"
+        source.write_bytes(b"data")
+
+        # Destination hors du hardlink_path configuré
+        success, msg = svc.create_hardlink(
+            str(source),
+            str(tmpdir / "outside" / "movie.mkv")
+        )
+        assert not success
+        assert "accès refusé" in msg.lower()
+
+    def test_destination_inside_hardlink_path(self, mock_hardlink_path):
+        svc, tmpdir, hardlink_dir = mock_hardlink_path
+        source = tmpdir / "movie.mkv"
+        source.write_bytes(b"data")
+
+        success, msg = svc.create_hardlink(
+            str(source),
+            str(hardlink_dir / "Movie.2024.mkv")
+        )
+        assert success
+        assert (hardlink_dir / "Movie.2024.mkv").exists()

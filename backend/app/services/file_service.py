@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 import logging
 import os
-import shutil
 
 from app.config import settings
 
@@ -264,8 +263,96 @@ class FileService:
             logger.error("Erreur recherche: %s", e)
             return []
     
+    def _validate_hardlink_paths(self, source: Path, destination: Path) -> Optional[str]:
+        """Valide les chemins source et destination pour un hardlink.
+        
+        Returns:
+            None si valide, message d'erreur sinon.
+        """
+        if not source.exists():
+            return f"La source n'existe pas: {source}"
+        
+        if not self._is_path_allowed(source):
+            return "Accès refusé: la source n'est pas dans le répertoire média"
+        
+        from app.config import user_settings
+        hardlink_path = user_settings.get().get("paths", {}).get("hardlink_path", "")
+        if hardlink_path:
+            try:
+                destination.resolve().relative_to(Path(hardlink_path).resolve())
+            except ValueError:
+                return "Accès refusé: la destination n'est pas dans le répertoire de hardlinks configuré"
+        else:
+            if not self._is_path_allowed(destination):
+                return "Accès refusé: la destination n'est pas dans le répertoire média. Configurez un dossier de hardlinks dans les paramètres."
+        
+        return None
+
+    def _build_existing_inodes(self, directory: Path) -> dict:
+        """Construit un index inode → chemin relatif pour les fichiers existants dans un dossier.
+        
+        Utilise os.scandir récursif pour minimiser les appels système (1 stat par fichier
+        au lieu de exists() + stat() + stat() = 3 appels).
+        
+        Returns:
+            Dict {chemin_relatif_str: inode} des fichiers existants.
+        """
+        existing = {}
+        if not directory.exists():
+            return existing
+        
+        def _scan(current: Path, rel_prefix: Path):
+            try:
+                with os.scandir(current) as entries:
+                    for entry in entries:
+                        rel = rel_prefix / entry.name
+                        if entry.is_file(follow_symlinks=False):
+                            try:
+                                # entry.stat().st_ino peut retourner 0 sur Windows via scandir
+                                # Utiliser Path.stat() qui retourne toujours le bon inode
+                                existing[str(rel)] = Path(entry.path).stat().st_ino
+                            except OSError:
+                                pass
+                        elif entry.is_dir(follow_symlinks=False):
+                            _scan(Path(entry.path), rel)
+            except PermissionError:
+                pass
+        
+        _scan(directory, Path('.'))
+        return existing
+
+    def _collect_source_files(self, source: Path) -> List[Path]:
+        """Collecte tous les fichiers source en une seule passe avec os.scandir.
+        
+        Returns:
+            Liste de Path relatifs des fichiers dans le dossier source.
+        """
+        files = []
+        
+        def _scan(current: Path, rel_prefix: Path):
+            try:
+                with os.scandir(current) as entries:
+                    for entry in entries:
+                        rel = rel_prefix / entry.name
+                        if entry.is_file(follow_symlinks=False):
+                            files.append(rel)
+                        elif entry.is_dir(follow_symlinks=False):
+                            _scan(Path(entry.path), rel)
+            except PermissionError:
+                pass
+        
+        _scan(source, Path('.'))
+        return files
+
     def create_hardlink(self, source_path: str, destination_path: str) -> Tuple[bool, str]:
-        """Crée un hardlink entre la source et la destination
+        """Crée un hardlink entre la source et la destination.
+        
+        Pour les fichiers: crée un hardlink direct.
+        Pour les dossiers: crée l'arborescence et hardlink chaque fichier.
+        
+        Optimisé pour les dossiers de séries : pré-indexe les inodes existants
+        en une seule passe (os.scandir) pour éviter les appels exists()/stat()
+        répétés par fichier.
         
         Args:
             source_path: Chemin du fichier/dossier source
@@ -278,54 +365,28 @@ class FileService:
             source = Path(source_path)
             destination = Path(destination_path)
             
-            # Vérifier que la source existe
-            if not source.exists():
-                return False, f"La source n'existe pas: {source_path}"
-            
-            # Vérifier que la source est autorisée (dans media_root)
-            if not self._is_path_allowed(source):
-                return False, "Accès refusé: la source n'est pas dans le répertoire média"
-            
-            # Vérifier que la destination est dans un répertoire autorisé (hardlink_path ou media_root)
-            from app.config import user_settings
-            hardlink_path = user_settings.get().get("paths", {}).get("hardlink_path", "")
-            if hardlink_path:
-                try:
-                    destination.resolve().relative_to(Path(hardlink_path).resolve())
-                except ValueError:
-                    return False, "Accès refusé: la destination n'est pas dans le répertoire de hardlinks configuré"
-            else:
-                # Si aucun hardlink_path configuré, autoriser uniquement dans media_root
-                if not self._is_path_allowed(destination):
-                    return False, "Accès refusé: la destination n'est pas dans le répertoire média. Configurez un dossier de hardlinks dans les paramètres."
+            # Validation des chemins
+            error = self._validate_hardlink_paths(source, destination)
+            if error:
+                return False, error
             
             # Créer le dossier parent de destination s'il n'existe pas
-            destination_parent = destination.parent
             try:
-                destination_parent.mkdir(parents=True, exist_ok=True)
+                destination.parent.mkdir(parents=True, exist_ok=True)
             except Exception as e:
                 return False, f"Impossible de créer le dossier destination: {str(e)}"
             
-            # Vérifier si la destination existe déjà
-            if destination.exists():
-                # Vérifier si c'est déjà un hardlink vers la même source
-                if destination.is_file():
+            # === CAS FICHIER ===
+            if source.is_file():
+                # Vérifier si la destination existe déjà
+                if destination.exists():
                     try:
                         if destination.stat().st_ino == source.stat().st_ino:
-                            # Même inode = même fichier (déjà hardlinké)
                             return True, f"Hardlink déjà existant: {destination_path}"
                     except Exception:
                         pass
-                # Pour les dossiers, on vérifie si le dossier existe et on traite les fichiers
-                elif source.is_dir() and destination.is_dir():
-                    # Continuer pour traiter les fichiers manquants dans le dossier
-                    pass
-                else:
                     return False, f"La destination existe déjà: {destination_path}"
-            
-            # Créer le hardlink
-            if source.is_file():
-                # Hardlink pour un fichier
+                
                 try:
                     os.link(source, destination)
                     return True, f"Hardlink créé: {destination_path}"
@@ -336,56 +397,80 @@ class FileService:
                         return False, f"Impossible de créer le hardlink: {str(e)}"
                     else:
                         return False, f"Erreur lors de la création du hardlink: {str(e)}"
+            
+            # === CAS DOSSIER ===
             elif source.is_dir():
-                # Pour les dossiers, on crée un dossier et on hardlink chaque fichier
                 try:
                     destination.mkdir(parents=True, exist_ok=True)
+                    
+                    # Phase 1: Collecter tous les fichiers source en une passe
+                    source_files = self._collect_source_files(source)
+                    total_files = len(source_files)
+                    
+                    if total_files == 0:
+                        return True, "Dossier vide, rien à traiter"
+                    
+                    # Phase 2: Indexer les fichiers existants à la destination (1 seule passe)
+                    existing_inodes = self._build_existing_inodes(destination)
+                    
+                    # Phase 3: Créer les sous-dossiers nécessaires en batch
+                    needed_dirs = set()
+                    for rel_path in source_files:
+                        parent = rel_path.parent
+                        if str(parent) != '.':
+                            needed_dirs.add(parent)
+                    
+                    for dir_path in sorted(needed_dirs):
+                        (destination / dir_path).mkdir(parents=True, exist_ok=True)
+                    
+                    # Phase 4: Créer les hardlinks
                     linked_count = 0
                     skipped_count = 0
                     error_count = 0
+                    errors = []
                     
-                    for item in source.rglob('*'):
-                        if item.is_file():
-                            rel_path = item.relative_to(source)
-                            dest_file = destination / rel_path
-                            dest_file.parent.mkdir(parents=True, exist_ok=True)
-                            
-                            # Vérifier si le fichier existe déjà
-                            if dest_file.exists():
-                                try:
-                                    if dest_file.stat().st_ino == item.stat().st_ino:
-                                        # Même inode = déjà hardlinké
-                                        skipped_count += 1
-                                        continue
-                                    else:
-                                        # Fichier différent, on skip avec un warning
-                                        skipped_count += 1
-                                        continue
-                                except Exception:
-                                    skipped_count += 1
-                                    continue
-                            
+                    for rel_path in source_files:
+                        rel_str = str(rel_path)
+                        source_file = source / rel_path
+                        dest_file = destination / rel_path
+                        
+                        # Vérifier via l'index si le fichier existe déjà
+                        if rel_str in existing_inodes:
+                            existing_ino = existing_inodes[rel_str]
                             try:
-                                    os.link(item, dest_file)
-                                    linked_count += 1
+                                source_ino = source_file.stat().st_ino
+                                if existing_ino == source_ino:
+                                    skipped_count += 1  # Déjà hardlinké
+                                    continue
+                                else:
+                                    skipped_count += 1  # Fichier différent, on skip
+                                    continue
                             except OSError:
-                                # Si le hardlink échoue, on copie
-                                try:
-                                    shutil.copy2(item, dest_file)
-                                    error_count += 1
-                                except Exception:
-                                    error_count += 1
+                                skipped_count += 1
+                                continue
+                        
+                        # Créer le hardlink
+                        try:
+                            os.link(source_file, dest_file)
+                            linked_count += 1
+                        except OSError as e:
+                            error_count += 1
+                            if len(errors) < 3:  # Limiter les messages d'erreur
+                                errors.append(f"{rel_path}: {e}")
                     
+                    # Construire le message de résultat
                     messages = []
                     if linked_count > 0:
                         messages.append(f"{linked_count} hardlinks créés")
                     if skipped_count > 0:
                         messages.append(f"{skipped_count} fichiers déjà existants ignorés")
                     if error_count > 0:
-                        messages.append(f"{error_count} copies (erreur de hardlink)")
+                        error_detail = "; ".join(errors)
+                        messages.append(f"{error_count} erreurs ({error_detail})")
                     
-                    return True, f"Dossier traité: {', '.join(messages)}"
-                        
+                    success = error_count == 0 or linked_count > 0
+                    return success, f"Dossier traité ({total_files} fichiers): {', '.join(messages)}"
+                    
                 except Exception as e:
                     return False, f"Erreur lors de la création des hardlinks: {str(e)}"
             

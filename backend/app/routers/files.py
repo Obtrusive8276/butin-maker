@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query, Body, HTTPException
 from typing import Optional, List
 from pydantic import BaseModel
+import asyncio
 from ..services.file_service import file_service
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -85,7 +86,10 @@ async def create_hardlink(data: HardlinkRequest):
     
     Note: Les hardlinks ne fonctionnent que sur le même système de fichiers
     """
-    success, message = file_service.create_hardlink(
+    # Exécuter dans un thread pour ne pas bloquer l'event loop async
+    # (les opérations I/O fichiers sont synchrones)
+    success, message = await asyncio.to_thread(
+        file_service.create_hardlink,
         data.source_path,
         data.destination_path
     )

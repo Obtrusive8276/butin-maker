@@ -6,7 +6,6 @@ import type {
   TorrentResponse,
   MediaInfo,
   PresentationData,
-  LaCaleMetaResponse,
   LaCaleUploadRequest,
   LaCaleUploadResponse,
 } from '../types';
@@ -281,11 +280,6 @@ export const tmdbApi = {
 };
 
 export const lacaleApi = {
-  getMeta: async (): Promise<LaCaleMetaResponse> => {
-    const response = await api.get<LaCaleMetaResponse>('/lacale/meta');
-    return response.data;
-  },
-
   upload: async (data: LaCaleUploadRequest): Promise<LaCaleUploadResponse> => {
     const response = await api.post<LaCaleUploadResponse>('/lacale/upload', data);
     return response.data;

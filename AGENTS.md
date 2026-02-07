@@ -40,7 +40,7 @@ la-cale-uploader/
 │   │   │   ├── torrent.py          # Gestion qBittorrent
 │   │   │   ├── mediainfo.py        # Génération NFO
 │   │   │   ├── presentation.py     # Génération présentation
-│   │   │   ├── tags.py             # Gestion des tags
+│   │   │   ├── lacale.py           # Intégration API La Cale (upload)
 │   │   │   ├── settings.py         # Paramètres utilisateur
 │   │   │   └── tmdb.py             # Recherche TMDB & Renommage
 │   │   ├── services/
@@ -60,7 +60,6 @@ la-cale-uploader/
 │   │       ├── __init__.py
 │   │       └── helpers.py
 │   ├── data/
-│   │   ├── tags_data.json          # Données des tags (existant)
 │   │   └── settings.json           # Paramètres persistants
 │   ├── templates/
 │   │   └── presentation_template.txt
@@ -143,9 +142,9 @@ la-cale-uploader/
 - Copie dans le presse-papier
 
 ### 6. Système de Tags
-- Chargement des tags depuis `tags_data.json`
-- Navigation hiérarchique :
-  - Catégorie principale → Sous-catégorie → Caractéristiques → Tags
+- Chargement des tags depuis `frontend/src/utils/tagsDataFallback.ts`
+- Données locales (local-only) avec IDs réels des tags La Cale
+- Filtrage automatique Films/Séries selon `contentType`
 - Sélection multiple avec validation
 - Affichage des tags sélectionnés pour copie manuelle
 
@@ -448,7 +447,6 @@ docker run -d --name backend --network lacale-network -p 8000:8000 `
   -v "C:/Users/Nicolas/Desktop/lacale-config:/config" `
   -v "C:/Users/Nicolas/Desktop/lacale-output:/app/output" `
   -v "${PWD}/backend/templates:/app/templates:ro" `
-  -v "${PWD}/tags_data.json:/app/data/tags_data.json:ro" `
   -e "MEDIA_ROOT=/data" `
   -e "OUTPUT_DIR=/app/output" `
   -e "CONFIG_DIR=/config" `
@@ -508,7 +506,7 @@ npm run dev
 
 3. **MediaInfo** : Nécessite que les fichiers soient accessibles depuis le serveur backend. Pour des fichiers distants, prévoir un montage réseau ou une copie locale.
 
-4. **Tags La Cale** : La structure des tags est chargée depuis `tags_data.json`. Mettre à jour ce fichier si les tags du tracker changent.
+4. **Tags La Cale** : Le frontend utilise une source locale unique (`frontend/src/utils/tagsDataFallback.ts`) avec les IDs réels des tags. Aucun appel frontend vers `/lacale/meta`.
 
 ---
 
@@ -523,7 +521,7 @@ npm run dev
 
 ## 📄 Fichiers de Référence
 
-- `tags_data.json` : Structure complète des catégories et tags La Cale
+- `frontend/src/utils/tagsDataFallback.ts` : Source locale des catégories et tags La Cale
 - `Modèle présentation.txt` : Template BBCode pour les présentations
 
 ---
@@ -734,12 +732,6 @@ Utilisée dans : `MediaInfoViewer.tsx`, `Finalize.tsx`
 - `GET /presentation/template` - Récupération template
 - `POST /presentation/template` - Sauvegarde template
 
-#### Tags (`/tags`)
-- `GET /tags/` - Tous les tags
-- `GET /tags/categories` - Catégories principales
-- `GET /tags/category/{slug}` - Détails catégorie
-- `GET /tags/subcategories/{category_slug}` - Sous-catégories
-
 #### Settings (`/settings`)
 - `GET /settings/` - Récupération settings
 - `POST /settings/` - Sauvegarde settings
@@ -772,7 +764,7 @@ Utilisée dans : `MediaInfoViewer.tsx`, `Finalize.tsx`
 - [x] **Bug - `naming_service.py`** : Faux positifs détection plateforme/source par substring (`"max"` matche `"maximum"`). Utiliser des word boundaries regex
 - [x] **Config - `main.py`** : CORS origins hardcodés. Rendre configurable via variable d'environnement
 - [x] **Logging - `tmdb_service.py`** : Erreurs TMDB avalées silencieusement (401/404 retournent tous `None`). Logger le status + body
-- [x] **Performance - `routers/tags.py`** : `tags_data.json` relu et parsé à chaque requête. Mettre en cache + rendre le path configurable
+- [x] **Performance - tags frontend** : migration vers source locale `tagsDataFallback.ts` (plus d'appel frontend `/lacale/meta`)
 - [x] **API - `routers/files.py`, `torrent.py`, `mediainfo.py`** : Retournent HTTP 200 avec JSON erreur. Utiliser `HTTPException(status_code=404)`
 - [x] **Code quality - `mediainfo_service.py`** : Double `MI.parse()` inutile. Supprimer le premier appel
 - [x] **Code quality** : Remplacer tous les `print()` par le module `logging`
@@ -1472,7 +1464,7 @@ gh pr create --base main --head beta \
 | Question | Réponse |
 |----------|---------|
 | Source flag torrent ? | ✅ Oui, ajouter `t.source = "lacale"` automatiquement |
-| Gestion tags ? | ✅ Option A - Récupérer dynamiquement via `/meta` (films vs séries) |
+| Gestion tags ? | ✅ Source locale `tagsDataFallback.ts` (local-only) avec filtrage Films/Séries |
 | API key vs passkey ? | ✅ Une seule API key (header `X-Api-Key`) - passkey obsolète |
 | Détection catégorie ? | ✅ Auto selon `contentType` (movie→Films, tv→Séries) |
 | Position bouton upload ? | ✅ Option A - Dans `Finalize.tsx` existant |
@@ -1483,13 +1475,15 @@ gh pr create --base main --head beta \
 
 ---
 
-## Étape 3 - Migration Tags vers API Dynamique 🏷️
+## Étape 3 - Tags Local-Only (source stable) 🏷️
 
 ### 🎯 Vue d'ensemble
 
-Remplacement du fichier statique `tags_data.json` par l'endpoint dynamique `/api/external/meta` de La Cale. Les tags seront récupérés en temps réel, filtrés par type de contenu (Films vs Séries), et mis en cache côté frontend (TanStack Query + localStorage).
+> **Décision effective (2026-02-07)** : cette section contient l'historique de migration. La stratégie en production est désormais **local-only** pour les tags frontend (`tagsDataFallback.ts`). Toute référence à un chargement dynamique frontend via `/lacale/meta` doit être considérée comme obsolète.
 
-**Objectif** : Supprimer toute dépendance à `tags_data.json` et utiliser exclusivement l'API La Cale comme source de vérité pour les catégories et tags.
+L'approche API dynamique via `/api/external/meta` a été abandonnée côté frontend, car l'API retourne des groupes vidéo incomplets (`tags: null`).
+
+**Objectif actuel** : Utiliser uniquement une source locale fiable (`frontend/src/utils/tagsDataFallback.ts`) avec IDs réels des tags, filtrage Films/Séries et zéro appel frontend vers `/lacale/meta`.
 
 **Méthodologie** : TDD strict — tests d'abord, implémentation ensuite  
 **Branche** : `beta`  
@@ -1999,8 +1993,8 @@ Si la migration échoue ou si l'API La Cale est indisponible :
 
 ### 🚨 POINTS D'ATTENTION
 
-- **API key requise** : L'endpoint `/meta` nécessite l'API key (`X-Api-Key` header). Si l'utilisateur n'a pas configuré sa clé, les tags ne chargeront pas → afficher un message clair
-- **IP restriction** : L'API La Cale a une restriction IP. Les tests unitaires doivent mocker les appels HTTP
+- **Aucune API tags côté frontend** : Les tags sont chargés localement depuis `tagsDataFallback.ts`, donc pas d'erreur liée à `/meta`
+- **Mises à jour tags** : Si La Cale change ses IDs, mettre à jour `frontend/src/utils/tagsDataFallback.ts`
 - **Tags IDs vs Names** : Le changement de `tag.name` → `tag.id` dans `selectedTags` est un breaking change pour le store. S'assurer que le store est bien vidé/réinitialisé
 - **Présélection** : La logique de présélection automatique (basée sur MediaInfo) doit chercher par `name`/`slug` mais stocker des `id`
 
@@ -2008,8 +2002,6 @@ Si la migration échoue ou si l'API La Cale est indisponible :
 
 ### ❓ QUESTIONS OUVERTES (Étape 3)
 
-1. **Filtrage tagGroups par catégorie** : L'API ne filtre pas les tagGroups par Films/Séries. Faut-il filtrer côté frontend ou tout afficher ?
-   - **Décision actuelle** : Tout afficher (le tracker valide côté serveur)
-2. **Cache localStorage expiration** : 24h est-il suffisant ?
-3. **Suppression complète `tags_data.json`** : Archiver (.archive) ou supprimer définitivement ?
+1. **Source tags locale** : Faut-il synchroniser périodiquement `tagsDataFallback.ts` avec La Cale ?
+2. **Suppression complète `tags_data.json`** : Archiver (.archive) ou supprimer définitivement ?
    - **Décision actuelle** : Archiver (renommer en .archive)

@@ -18,43 +18,7 @@ vi.mock('../services/api', () => ({
     generate: vi.fn().mockResolvedValue({ bbcode: '' }),
   },
   lacaleApi: {
-    getCategoryId: vi.fn(),
     upload: vi.fn(),
-    getMeta: vi.fn().mockResolvedValue({
-      categories: [
-        {
-          id: 'cat_video',
-          name: 'Vidéo',
-          slug: 'video',
-          children: [
-            { id: 'cat_films', name: 'Films', slug: 'films', children: [] },
-            { id: 'cat_series', name: 'Séries', slug: 'series', children: [] },
-          ],
-        },
-      ],
-      tagGroups: [
-        {
-          id: 'tg_quality',
-          name: 'Qualité vidéo',
-          slug: 'qualite-video',
-          tags: [
-            { id: 'tag_1080p', name: '1080p', slug: '1080p' },
-            { id: 'tag_720p', name: '720p', slug: '720p' },
-            { id: 'tag_2160p', name: '2160p', slug: '2160p' },
-          ],
-        },
-        {
-          id: 'tg_source',
-          name: 'Source',
-          slug: 'source',
-          tags: [
-            { id: 'tag_bluray', name: 'BluRay', slug: 'bluray' },
-            { id: 'tag_web', name: 'WEB', slug: 'web' },
-          ],
-        },
-      ],
-      ungroupedTags: [],
-    }),
   },
 }));
 
@@ -141,7 +105,6 @@ describe('Finalize', () => {
     const user = userEvent.setup();
     useAppStore.setState({ settings: mockSettingsWithApiKey });
 
-    vi.mocked(lacaleApi.getCategoryId).mockResolvedValue({ category_id: 'cat-films-123' });
     vi.mocked(lacaleApi.upload).mockResolvedValue({
       success: true,
       id: '42',
@@ -168,7 +131,6 @@ describe('Finalize', () => {
     const user = userEvent.setup();
     useAppStore.setState({ settings: mockSettingsWithApiKey });
 
-    vi.mocked(lacaleApi.getCategoryId).mockResolvedValue({ category_id: 'cat-films-123' });
     vi.mocked(lacaleApi.upload).mockRejectedValue({
       response: { status: 401, data: { detail: 'Unauthorized' } },
     });
@@ -185,7 +147,6 @@ describe('Finalize', () => {
     const user = userEvent.setup();
     useAppStore.setState({ settings: mockSettingsWithApiKey });
 
-    vi.mocked(lacaleApi.getCategoryId).mockResolvedValue({ category_id: 'cat-films-123' });
     vi.mocked(lacaleApi.upload).mockRejectedValue({
       response: { status: 409, data: { detail: 'Conflict' } },
     });
@@ -202,7 +163,6 @@ describe('Finalize', () => {
     const user = userEvent.setup();
     useAppStore.setState({ settings: mockSettingsWithApiKey });
 
-    vi.mocked(lacaleApi.getCategoryId).mockResolvedValue({ category_id: 'cat-films-123' });
     vi.mocked(lacaleApi.upload).mockRejectedValue({
       response: { status: 429, data: { detail: 'Rate limited' } },
     });
@@ -219,7 +179,6 @@ describe('Finalize', () => {
     const user = userEvent.setup();
     useAppStore.setState({ settings: mockSettingsWithApiKey });
 
-    vi.mocked(lacaleApi.getCategoryId).mockResolvedValue({ category_id: 'cat-films-123' });
     // Premier appel echoue
     vi.mocked(lacaleApi.upload).mockRejectedValueOnce({
       response: { status: 500, data: { detail: 'Server error' } },

@@ -9,7 +9,6 @@ services:
     volumes:
       - ./config:/config
       - ./output:/app/output
-      - ./tags_data.json:/app/data/tags_data.json:ro
       # Montez votre dossier de médias ici
       - /path/to/your/media:/data:ro
     ports:

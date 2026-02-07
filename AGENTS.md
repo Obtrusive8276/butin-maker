@@ -1480,3 +1480,536 @@ gh pr create --base main --head beta \
 | Niveau tests ? | ✅ Maximum de tests TDD, 100% doivent passer |
 | Stockage API key ? | ✅ Option A - `tracker.lacale_api_key` |
 | Branche beta ? | ✅ Tout sur beta, merge main après validation utilisateur |
+
+---
+
+## Étape 3 - Migration Tags vers API Dynamique 🏷️
+
+### 🎯 Vue d'ensemble
+
+Remplacement du fichier statique `tags_data.json` par l'endpoint dynamique `/api/external/meta` de La Cale. Les tags seront récupérés en temps réel, filtrés par type de contenu (Films vs Séries), et mis en cache côté frontend (TanStack Query + localStorage).
+
+**Objectif** : Supprimer toute dépendance à `tags_data.json` et utiliser exclusivement l'API La Cale comme source de vérité pour les catégories et tags.
+
+**Méthodologie** : TDD strict — tests d'abord, implémentation ensuite  
+**Branche** : `beta`  
+**Exigence** : 100% des tests doivent passer avant commit
+
+---
+
+### 📊 Mapping des structures de données
+
+#### Ancienne structure (`tags_data.json`)
+
+```
+quaiprincipalcategories[] → emplacementsouscategorie[] → caracteristiques[] → tags[]
+         (Vidéo)                 (Films / Séries)            (Qualité vidéo)      (1080p)
+```
+
+Champs utilisés :
+- `category.slug` : `"video"`
+- `subCategory.slug` : `"films"` ou `"series"`
+- `caracteristique.name` : nom du groupe (ex: "Qualité vidéo")
+- `tag.name` : nom du tag (ex: "1080p") — utilisé comme identifiant
+
+#### Nouvelle structure (API `/meta`)
+
+```
+categories[] → children[]        tagGroups[] → tags[]       ungroupedTags[]
+  (Vidéo)       (Films/Séries)    (Qualité vidéo)  (1080p)
+```
+
+Champs utilisés :
+- `category.slug` : `"video"`
+- `child.slug` : `"films"` ou `"series"`
+- `child.id` : `"cat_films"` ou `"cat_series"` — pour `categoryId` de l'upload
+- `tagGroup.name` : nom du groupe (ex: "Qualité vidéo")
+- `tagGroup.tags[].id` : **ID du tag** — utilisé pour l'upload (`tags=TAG_ID`)
+- `tagGroup.tags[].name` : nom affiché
+- `tagGroup.tags[].slug` : slug du tag
+
+#### Différences clés
+
+| Aspect | Ancien (`tags_data.json`) | Nouveau (API `/meta`) |
+|--------|--------------------------|----------------------|
+| **Identifiant tag** | `tag.name` (string) | `tag.id` (string unique) |
+| **Groupement** | `caracteristiques[]` | `tagGroups[]` |
+| **Filtrage Films/Séries** | Sous-catégorie dans la hiérarchie | Pas de filtrage natif par catégorie dans tagGroups |
+| **Persistance** | Fichier statique embarqué | API dynamique + cache localStorage |
+| **Mise à jour** | Manuelle (modifier fichier) | Automatique (API) |
+
+#### Stratégie de filtrage
+
+L'API `/meta` retourne **tous** les tagGroups sans distinction Films/Séries. Deux approches possibles :
+- **Option A** : Afficher tous les tagGroups (simpler, l'utilisateur choisit)
+- **Option B** : Filtrer côté frontend selon le `contentType` sélectionné
+
+**Décision** : Option A — Afficher tous les tagGroups. Le tracker gère la validation côté serveur. Les tags non applicables seront simplement ignorés.
+
+---
+
+### 🗂️ Structure des fichiers
+
+#### Nouveaux fichiers ✨
+
+```
+frontend/src/
+├── utils/
+│   └── tagsAdapter.ts                 # Adaptateur ancien format → nouveau format
+└── hooks/
+    └── useCachedTags.ts               # Hook avec cache localStorage + TanStack Query
+```
+
+#### Fichiers modifiés 🔧
+
+```
+backend/
+├── app/main.py                        # Supprimer import/register tags router
+├── Dockerfile                         # Supprimer COPY tags_data.json
+frontend/src/
+├── components/Finalize.tsx            # Remplacer tagsApi → lacaleApi.getMeta()
+├── components/Finalize.test.tsx       # Adapter mocks
+├── services/api.ts                    # Supprimer tagsApi
+├── types/index.ts                     # Ajouter types API meta, supprimer anciens types tags
+```
+
+#### Fichiers supprimés ❌
+
+```
+backend/app/routers/tags.py            # Router tags statique
+backend/tests/test_tags_router.py      # Tests du router supprimé (si existant)
+```
+
+#### Fichiers archivés 📦
+
+```
+tags_data.json → tags_data.json.archive    # Renommer (pas supprimer)
+```
+
+---
+
+### 🧪 PHASE 1 : TESTS
+
+#### 1.1 - Tests Frontend : `useCachedTags.ts`
+
+**Fichier** : `frontend/src/hooks/useCachedTags.test.ts` ✨ NOUVEAU
+
+```typescript
+// Tests à écrire :
+// 1. Retourne les données depuis l'API quand le cache est vide
+// 2. Retourne les données depuis localStorage quand l'API échoue
+// 3. Met à jour localStorage après un fetch réussi
+// 4. Respecte le staleTime de 1h (ne refetch pas avant)
+// 5. Retourne état loading pendant le fetch
+// 6. Retourne état error quand API et cache échouent
+// 7. Cache expiré → refetch depuis API
+```
+
+**Temps estimé** : 1h
+
+#### 1.2 - Tests Frontend : `tagsAdapter.ts`
+
+**Fichier** : `frontend/src/utils/tagsAdapter.test.ts` ✨ NOUVEAU
+
+```typescript
+// Tests à écrire :
+// 1. Transforme tagGroups en format Caracteristique[]
+// 2. Gère tagGroups vide → retourne []
+// 3. Inclut ungroupedTags dans un groupe "Autres"
+// 4. Préserve l'ordre des tagGroups
+// 5. Mappe correctement id, name, slug de chaque tag
+```
+
+**Temps estimé** : 45 min
+
+#### 1.3 - Adapter tests existants : `Finalize.test.tsx`
+
+**Modifications** :
+- Remplacer mock `tagsApi.getAll` par mock `lacaleApi.getMeta`
+- Adapter les données mockées au format API `/meta`
+- Vérifier que la présélection automatique fonctionne avec les nouveaux IDs
+
+**Temps estimé** : 1h
+
+#### 📊 Récapitulatif Tests Phase 1
+
+| Fichier | Tests | Temps |
+|---------|-------|-------|
+| `useCachedTags.test.ts` | 7 | 1h |
+| `tagsAdapter.test.ts` | 5 | 45 min |
+| `Finalize.test.tsx` (modif) | ~5 adaptés | 1h |
+| **TOTAL** | **~17** | **2h 45min** |
+
+---
+
+### 🚀 PHASE 2 : BACKEND — Nettoyage
+
+#### 2.1 - Supprimer le router tags
+
+**Fichier à supprimer** : `backend/app/routers/tags.py`
+
+Ce router servait à lire et parser `tags_data.json`. Avec la migration vers l'API La Cale, il n'est plus nécessaire. L'endpoint `/lacale/meta` (déjà implémenté dans `routers/lacale.py`) le remplace entièrement.
+
+#### 2.2 - Mettre à jour `main.py`
+
+**Fichier** : `backend/app/main.py`
+
+Supprimer :
+```python
+from .routers import tags
+app.include_router(tags.router, prefix="/api")
+```
+
+#### 2.3 - Mettre à jour `Dockerfile`
+
+**Fichier** : `backend/Dockerfile`
+
+Supprimer la ligne :
+```dockerfile
+COPY app/data/tags_data.json /app/data/tags_data.json
+```
+
+#### 2.4 - Supprimer les tests du router tags
+
+Supprimer les tests liés au router tags dans `test_routers.py` ou fichier dédié s'il existe.
+
+**Temps estimé** : 30 min
+
+---
+
+### 🚀 PHASE 3 : FRONTEND — Utilitaires
+
+#### 3.1 - `tagsAdapter.ts`
+
+**Fichier** : `frontend/src/utils/tagsAdapter.ts` ✨ NOUVEAU (~60 lignes)
+
+```typescript
+import type { LaCaleMetaResponse } from '../types';
+
+interface AdaptedTag {
+  id: string;      // ID API La Cale (pour l'upload)
+  name: string;    // Nom affiché
+  slug: string;    // Slug
+}
+
+interface AdaptedTagGroup {
+  name: string;         // Nom du groupe (ex: "Qualité vidéo")
+  tags: AdaptedTag[];   // Tags du groupe
+}
+
+/**
+ * Transforme la réponse /meta en groupes de tags exploitables par Finalize
+ */
+export function adaptMetaToTagGroups(meta: LaCaleMetaResponse): AdaptedTagGroup[] {
+  const groups: AdaptedTagGroup[] = [];
+  
+  // tagGroups → AdaptedTagGroup[]
+  for (const tg of meta.tagGroups || []) {
+    groups.push({
+      name: tg.name,
+      tags: (tg.tags || []).map(t => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+      })),
+    });
+  }
+  
+  // ungroupedTags → groupe "Autres" (si non vide)
+  if (meta.ungroupedTags?.length) {
+    groups.push({
+      name: "Autres",
+      tags: meta.ungroupedTags.map(t => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+      })),
+    });
+  }
+  
+  return groups;
+}
+```
+
+**Temps estimé** : 30 min
+
+#### 3.2 - `useCachedTags.ts`
+
+**Fichier** : `frontend/src/hooks/useCachedTags.ts` ✨ NOUVEAU (~70 lignes)
+
+```typescript
+import { useQuery } from '@tanstack/react-query';
+import { lacaleApi } from '../services/api';
+import type { LaCaleMetaResponse } from '../types';
+
+const CACHE_KEY = 'lacale_meta_cache';
+const STALE_TIME = 60 * 60 * 1000; // 1 heure
+
+function loadFromLocalStorage(): LaCaleMetaResponse | null {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+    const parsed = JSON.parse(cached);
+    // Vérifier expiration (24h pour localStorage)
+    if (parsed._cachedAt && Date.now() - parsed._cachedAt > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveToLocalStorage(data: LaCaleMetaResponse): void {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      ...data,
+      _cachedAt: Date.now(),
+    }));
+  } catch {
+    // localStorage plein ou indisponible
+  }
+}
+
+export function useCachedTags() {
+  return useQuery<LaCaleMetaResponse>({
+    queryKey: ['lacale-meta'],
+    queryFn: async () => {
+      const data = await lacaleApi.getMeta();
+      saveToLocalStorage(data);
+      return data;
+    },
+    staleTime: STALE_TIME,
+    placeholderData: () => loadFromLocalStorage() ?? undefined,
+    retry: 1,
+  });
+}
+```
+
+**Temps estimé** : 45 min
+
+---
+
+### 🚀 PHASE 4 : FRONTEND — Finalize.tsx
+
+#### 4.1 - Remplacer le chargement des tags
+
+**Avant** (lignes 186-230) :
+```typescript
+const { data: tagsData, isLoading: isLoadingTags } = useQuery({
+  queryKey: ['tags'],
+  queryFn: tagsApi.getAll,
+});
+// ... getFilmsCaracteristiques() avec quaiprincipalcategories
+```
+
+**Après** :
+```typescript
+import { useCachedTags } from '../hooks/useCachedTags';
+import { adaptMetaToTagGroups } from '../utils/tagsAdapter';
+
+const { data: metaData, isLoading: isLoadingTags } = useCachedTags();
+const tagGroups = metaData ? adaptMetaToTagGroups(metaData) : [];
+```
+
+#### 4.2 - Adapter le système de sélection
+
+**Avant** : `selectedTags` contient des `tag.name` (string)  
+**Après** : `selectedTags` contient des `tag.id` (string API La Cale)
+
+Impact sur :
+- `toggleTag(tag.id)` au lieu de `toggleTag(tag.name)`
+- `selectedTags.includes(tag.id)` pour la mise en surbrillance
+- Les tag IDs sont envoyés directement à `/lacale/upload` (champ `tag_ids`)
+- La présélection automatique doit matcher par `tag.name` ou `tag.slug` puis stocker `tag.id`
+
+#### 4.3 - Adapter la présélection automatique
+
+La présélection automatique (basée sur MediaInfo et TMDB) doit :
+1. Chercher les tags par `name` ou `slug` (ex: "1080p", "x264", "MULTi")
+2. Stocker les `id` correspondants dans `selectedTags`
+
+```typescript
+const addTagIfExists = (tagName: string) => {
+  for (const group of tagGroups) {
+    const found = group.tags.find(
+      t => t.name.toLowerCase() === tagName.toLowerCase() 
+        || t.slug.toLowerCase() === tagName.toLowerCase()
+    );
+    if (found && !autoTags.includes(found.id)) {
+      autoTags.push(found.id);
+    }
+  }
+};
+```
+
+#### 4.4 - Adapter le rendu des tags
+
+**Avant** :
+```tsx
+{getFilmsCaracteristiques().map((carac) => (
+  <div key={carac.name}>
+    <h4>{carac.name}</h4>
+    {carac.tags.map((tag) => (
+      <button onClick={() => toggleTag(tag.name)}
+              className={selectedTags.includes(tag.name) ? 'selected' : ''}>
+        {tag.name}
+      </button>
+    ))}
+  </div>
+))}
+```
+
+**Après** :
+```tsx
+{tagGroups.map((group) => (
+  <div key={group.name}>
+    <h4>{group.name}</h4>
+    {group.tags.map((tag) => (
+      <button key={tag.id}
+              onClick={() => toggleTag(tag.id)}
+              className={selectedTags.includes(tag.id) ? 'selected' : ''}>
+        {tag.name}
+      </button>
+    ))}
+  </div>
+))}
+```
+
+**Temps estimé** : 2h
+
+---
+
+### 🚀 PHASE 5 : NETTOYAGE
+
+#### 5.1 - Supprimer `tagsApi` de `api.ts`
+
+Supprimer l'objet `tagsApi` et son import dans `Finalize.tsx`.
+
+#### 5.2 - Supprimer les anciens types tags
+
+Dans `types/index.ts`, supprimer les types liés à l'ancien format :
+- `Caracteristique` (si plus utilisé nulle part)
+- Tout type lié à `quaiprincipalcategories`
+
+#### 5.3 - Supprimer le volume `tags_data.json` de Docker
+
+**Fichier** : `docker-compose.yml` (ligne 12)
+
+Supprimer :
+```yaml
+- ./tags_data.json:/app/data/tags_data.json:ro
+```
+
+**Fichier** : `docker-compose.dev.yml` (si existant, même suppression)
+
+#### 5.4 - Archiver `tags_data.json`
+
+```bash
+mv tags_data.json tags_data.json.archive
+```
+
+**Temps estimé** : 30 min
+
+---
+
+### 🚀 PHASE 6 : DOCUMENTATION
+
+Mettre à jour les références à `tags_data.json` dans `AGENTS.md` :
+- Section "Structure du Projet" : retirer `tags_data.json`
+- Section "Système de Tags" : mettre à jour la description
+- Section "Paramètres" : mentionner que les tags viennent de l'API
+- Section "Fichiers de Référence" : retirer `tags_data.json`
+- Section "Questions ouvertes" : marquer la question tags comme résolue
+
+**Temps estimé** : 30 min
+
+---
+
+### 🌳 GIT — Structure des commits
+
+**Ordre recommandé** (7 commits) :
+
+1. **Tests utilitaires frontend** (12 tests)
+   ```
+   test: ajout tests TDD tagsAdapter et useCachedTags
+   ```
+
+2. **Tests Finalize adaptés** (~5 tests modifiés)
+   ```
+   test: adapter mocks Finalize pour API /meta
+   ```
+
+3. **Backend nettoyage** (suppression router tags + Dockerfile)
+   ```
+   refactor: supprimer router tags statique (remplacé par /lacale/meta)
+   ```
+
+4. **Frontend utilitaires** (tagsAdapter + useCachedTags)
+   ```
+   feat: adaptateur tags API + hook cache localStorage
+   ```
+
+5. **Frontend Finalize** (migration complète)
+   ```
+   feat: migration tags Finalize vers API dynamique La Cale
+   ```
+
+6. **Nettoyage** (tagsApi, types, docker-compose, archive)
+   ```
+   chore: nettoyage tags statiques (api, types, docker, archive)
+   ```
+
+7. **Documentation**
+   ```
+   docs: mise à jour AGENTS.md références tags
+   ```
+
+**⚠️ IMPORTANT** : Ne jamais commit/push sans demande explicite de l'utilisateur !
+
+---
+
+### 📈 ESTIMATION TOTALE
+
+| Phase | Description | Temps |
+|-------|-------------|-------|
+| Phase 1 | Tests TDD (~17 tests) | 2h 45min |
+| Phase 2 | Backend nettoyage | 30 min |
+| Phase 3 | Frontend utilitaires | 1h 15min |
+| Phase 4 | Frontend Finalize | 2h |
+| Phase 5 | Nettoyage | 30 min |
+| Phase 6 | Documentation | 30 min |
+| **TOTAL** | | **~7h 30min** |
+
+---
+
+### 🔄 Plan de rollback
+
+Si la migration échoue ou si l'API La Cale est indisponible :
+
+1. `git revert` les commits Étape 3
+2. Renommer `tags_data.json.archive` → `tags_data.json`
+3. Restaurer le volume Docker dans `docker-compose.yml`
+4. Le router tags (`tags.py`) sera restauré par le revert Git
+
+**Fallback permanent** : Le hook `useCachedTags` utilise localStorage comme cache de secours. Si l'API est down, les derniers tags chargés seront affichés. Seule la première utilisation (cache vide + API down) affichera une erreur.
+
+---
+
+### 🚨 POINTS D'ATTENTION
+
+- **API key requise** : L'endpoint `/meta` nécessite l'API key (`X-Api-Key` header). Si l'utilisateur n'a pas configuré sa clé, les tags ne chargeront pas → afficher un message clair
+- **IP restriction** : L'API La Cale a une restriction IP. Les tests unitaires doivent mocker les appels HTTP
+- **Tags IDs vs Names** : Le changement de `tag.name` → `tag.id` dans `selectedTags` est un breaking change pour le store. S'assurer que le store est bien vidé/réinitialisé
+- **Présélection** : La logique de présélection automatique (basée sur MediaInfo) doit chercher par `name`/`slug` mais stocker des `id`
+
+---
+
+### ❓ QUESTIONS OUVERTES (Étape 3)
+
+1. **Filtrage tagGroups par catégorie** : L'API ne filtre pas les tagGroups par Films/Séries. Faut-il filtrer côté frontend ou tout afficher ?
+   - **Décision actuelle** : Tout afficher (le tracker valide côté serveur)
+2. **Cache localStorage expiration** : 24h est-il suffisant ?
+3. **Suppression complète `tags_data.json`** : Archiver (.archive) ou supprimer définitivement ?
+   - **Décision actuelle** : Archiver (renommer en .archive)

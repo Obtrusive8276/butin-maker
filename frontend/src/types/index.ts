@@ -112,35 +112,6 @@ export interface PresentationData {
   size: string;
 }
 
-export interface TagItem {
-  name: string;
-  id: string;
-}
-
-export interface Caracteristique {
-  name: string;
-  slug: string;
-  tags: TagItem[];
-}
-
-export interface SubCategory {
-  name: string;
-  slug: string;
-  emplacementsouscategorie: SubCategory[] | null;
-  caracteristiques: Caracteristique[] | null;
-}
-
-export interface Category {
-  name: string;
-  slug: string;
-  emplacementsouscategorie: SubCategory[] | null;
-  caracteristiques: Caracteristique[] | null;
-}
-
-export interface TagsData {
-  quaiprincipalcategories: Category[];
-}
-
 export type Step = 'files' | 'tmdb' | 'nfo' | 'rename' | 'torrent' | 'finalize';
 
 // La Cale API types

@@ -72,16 +72,6 @@ class TestSettingsRouter:
         assert router.prefix == "/settings"
 
 
-class TestTagsRouter:
-    """Tests pour le router tags"""
-    
-    def test_tags_router_exists(self):
-        """Test que le router tags existe"""
-        from app.routers.tags import router
-        assert router is not None
-        assert router.prefix == "/tags"
-
-
 class TestTmdbRouter:
     """Tests pour le router tmdb"""
     

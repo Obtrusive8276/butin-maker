@@ -14,16 +14,47 @@ vi.mock('../services/api', () => ({
   mediainfoApi: {
     downloadNfo: vi.fn((name: string) => `/api/mediainfo/download-nfo/${name}`),
   },
-  tagsApi: {
-    getAll: vi.fn().mockResolvedValue({ quaiprincipalcategories: [] }),
-  },
   presentationApi: {
     generate: vi.fn().mockResolvedValue({ bbcode: '' }),
   },
   lacaleApi: {
     getCategoryId: vi.fn(),
     upload: vi.fn(),
-    getMeta: vi.fn(),
+    getMeta: vi.fn().mockResolvedValue({
+      categories: [
+        {
+          id: 'cat_video',
+          name: 'Vidéo',
+          slug: 'video',
+          children: [
+            { id: 'cat_films', name: 'Films', slug: 'films', children: [] },
+            { id: 'cat_series', name: 'Séries', slug: 'series', children: [] },
+          ],
+        },
+      ],
+      tagGroups: [
+        {
+          id: 'tg_quality',
+          name: 'Qualité vidéo',
+          slug: 'qualite-video',
+          tags: [
+            { id: 'tag_1080p', name: '1080p', slug: '1080p' },
+            { id: 'tag_720p', name: '720p', slug: '720p' },
+            { id: 'tag_2160p', name: '2160p', slug: '2160p' },
+          ],
+        },
+        {
+          id: 'tg_source',
+          name: 'Source',
+          slug: 'source',
+          tags: [
+            { id: 'tag_bluray', name: 'BluRay', slug: 'bluray' },
+            { id: 'tag_web', name: 'WEB', slug: 'web' },
+          ],
+        },
+      ],
+      ungroupedTags: [],
+    }),
   },
 }));
 

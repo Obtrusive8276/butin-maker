@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { Download, Copy, Check, ExternalLink, FileText, File, Tags, Eye, X, Play, Loader2, Upload, AlertTriangle, RefreshCw } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
-import { torrentApi, mediainfoApi, tagsApi, presentationApi, lacaleApi } from '../services/api';
+import { torrentApi, mediainfoApi, presentationApi, lacaleApi } from '../services/api';
 import { useClipboard } from '../hooks/useClipboard';
+import { useCachedTags } from '../hooks/useCachedTags';
 import { getResolutionFromWidth } from '../utils/format';
-import type { Caracteristique, LaCaleUploadResponse } from '../types';
+import { adaptMetaToTagGroups, findTagId } from '../utils/tagsAdapter';
+import type { AdaptedTagGroup } from '../utils/tagsAdapter';
+import type { LaCaleUploadResponse } from '../types';
 
 export default function Finalize() {
   const { 
@@ -182,63 +185,20 @@ export default function Finalize() {
     }
   }, [tmdbInfo, mediaInfo, generatedBBCode]);
 
-  // Charger les tags
-  const { data: tagsData } = useQuery({
-    queryKey: ['tags'],
-    queryFn: tagsApi.getAll,
-  });
-
-  // Collecter tous les noms de tags existants
-  const getAllTagNames = (): Set<string> => {
-    const tagNames = new Set<string>();
-    if (!tagsData?.quaiprincipalcategories) return tagNames;
-    
-    for (const category of tagsData.quaiprincipalcategories) {
-      if (category.caracteristiques) {
-        for (const carac of category.caracteristiques) {
-          for (const tag of carac.tags || []) {
-            tagNames.add(tag.name);
-          }
-        }
-      }
-      for (const subCat of category.emplacementsouscategorie || []) {
-        for (const carac of subCat.caracteristiques || []) {
-          for (const tag of carac.tags || []) {
-            tagNames.add(tag.name);
-          }
-        }
-      }
-    }
-    return tagNames;
-  };
-
-  // Récupérer les caractéristiques de la catégorie Films ou Séries
-  const getFilmsCaracteristiques = (): Caracteristique[] => {
-    if (!tagsData?.quaiprincipalcategories) return [];
-    
-    const videoCategory = tagsData.quaiprincipalcategories.find(
-      (c: { slug: string }) => c.slug === 'video'
-    );
-    if (!videoCategory) return [];
-    
-    const targetSlug = contentType === 'movie' ? 'films' : 'series';
-    const subCategory = videoCategory.emplacementsouscategorie?.find(
-      (s: { slug: string }) => s.slug === targetSlug
-    );
-    
-    return subCategory?.caracteristiques || [];
-  };
+  // Charger les tags depuis l'API La Cale (avec cache localStorage)
+  const { data: metaData, isLoading: isLoadingTags } = useCachedTags();
+  const tagGroups: AdaptedTagGroup[] = metaData ? adaptMetaToTagGroups(metaData) : [];
 
   // Présélection automatique des tags
   useEffect(() => {
-    if (!tagsData || hasAutoSelected || selectedTags.length > 0) return;
+    if (tagGroups.length === 0 || hasAutoSelected || selectedTags.length > 0) return;
     
-    const existingTags = getAllTagNames();
     const autoTags: string[] = [];
     
-    const addTagIfExists = (tagName: string) => {
-      if (existingTags.has(tagName) && !autoTags.includes(tagName)) {
-        autoTags.push(tagName);
+    const addTagIfExists = (nameOrSlug: string) => {
+      const id = findTagId(tagGroups, nameOrSlug);
+      if (id && !autoTags.includes(id)) {
+        autoTags.push(id);
       }
     };
     
@@ -263,8 +223,6 @@ export default function Finalize() {
       const genres = tmdbInfo.genres.split(',').map((g: string) => g.trim());
       for (const genre of genres) {
         addTagIfExists(genre);
-        const capitalizedGenre = genre.charAt(0).toUpperCase() + genre.slice(1).toLowerCase();
-        addTagIfExists(capitalizedGenre);
       }
     }
     
@@ -274,8 +232,12 @@ export default function Finalize() {
       const videoCodec = videoTrack?.codec?.toLowerCase() || '';
       if (videoCodec.includes('hevc') || videoCodec.includes('h265') || videoCodec.includes('x265')) {
         addTagIfExists('HEVC/H265/x265');
+        addTagIfExists('x265');
+        addTagIfExists('HEVC');
       } else if (videoCodec.includes('avc') || videoCodec.includes('h264') || videoCodec.includes('x264')) {
         addTagIfExists('AVC/H264/x264');
+        addTagIfExists('x264');
+        addTagIfExists('H264');
       } else if (videoCodec.includes('av1')) {
         addTagIfExists('AV1');
       }
@@ -303,10 +265,14 @@ export default function Finalize() {
       const width = videoTrack?.width || 0;
       if (width >= 3840) {
         addTagIfExists('2160p (4K UHD)');
+        addTagIfExists('2160p');
+        addTagIfExists('4K');
       } else if (width >= 1920) {
         addTagIfExists('1080p (Full HD)');
+        addTagIfExists('1080p');
       } else if (width >= 1280) {
         addTagIfExists('720p (HD)');
+        addTagIfExists('720p');
       }
       
       // Extension
@@ -334,9 +300,7 @@ export default function Finalize() {
       setSelectedTags(autoTags);
     }
     setHasAutoSelected(true);
-  }, [tagsData, mediaInfo, releaseName, tmdbInfo, hasAutoSelected, selectedTags.length, setSelectedTags]);
-
-  const filmsCaracteristiques = getFilmsCaracteristiques();
+  }, [tagGroups, mediaInfo, releaseName, tmdbInfo, hasAutoSelected, selectedTags.length, setSelectedTags]);
 
   const handleDownloadTorrent = () => {
     if (torrentResult?.torrent_name) {
@@ -419,7 +383,7 @@ export default function Finalize() {
         title: releaseName || torrentResult.torrent_name || 'Untitled',
         category_id,
         torrent_file_path: torrentResult.torrent_path,
-        tag_ids: [],
+        tag_ids: selectedTags,
         description: generatedBBCode || undefined,
         tmdb_id: tmdbInfo?.id ? String(tmdbInfo.id) : undefined,
         tmdb_type: contentType === 'movie' ? 'MOVIE' : 'TV',
@@ -593,23 +557,23 @@ export default function Finalize() {
             <Tags className="w-5 h-5 text-purple-400" />
             Tags à sélectionner sur La Cale
           </h3>
-          {filmsCaracteristiques.length > 0 ? (
+          {tagGroups.length > 0 ? (
             <div className="space-y-4 max-h-64 overflow-y-auto">
-              {filmsCaracteristiques.map((carac: Caracteristique) => (
-                <div key={carac.slug}>
-                  <h4 className="text-xs text-gray-400 uppercase mb-2">{carac.name}</h4>
+              {tagGroups.map((group) => (
+                <div key={group.name}>
+                  <h4 className="text-xs text-gray-400 uppercase mb-2">{group.name}</h4>
                   <div className="flex flex-wrap gap-2">
-                    {carac.tags.map((tag) => (
+                    {group.tags.map((tag) => (
                       <button
-                        key={tag.name}
-                        onClick={() => toggleTag(tag.name)}
+                        key={tag.id}
+                        onClick={() => toggleTag(tag.id)}
                         className={`px-2 py-1 rounded text-sm transition-colors ${
-                          selectedTags.includes(tag.name)
+                          selectedTags.includes(tag.id)
                             ? 'bg-purple-500 text-white'
                             : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
                         }`}
                       >
-                        {selectedTags.includes(tag.name) && (
+                        {selectedTags.includes(tag.id) && (
                           <Check className="w-3 h-3 inline mr-1" />
                         )}
                         {tag.name}
@@ -620,7 +584,9 @@ export default function Finalize() {
               ))}
             </div>
           ) : (
-            <p className="text-gray-500">Chargement des tags...</p>
+            <p className="text-gray-500">
+              {isLoadingTags ? 'Chargement des tags...' : 'Aucun tag disponible pour cette catégorie.'}
+            </p>
           )}
         </div>
 

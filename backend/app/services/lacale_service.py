@@ -169,10 +169,11 @@ class LaCaleService:
             data["title"] = title
             data["categoryId"] = category_id
             
-            # Fichier .torrent
+            # Fichier .torrent — lire en bytes pour compatibilité AsyncClient
+            torrent_content = torrent_path.read_bytes()
             files["file"] = (
                 torrent_path.name,
-                open(torrent_file_path, "rb"),
+                torrent_content,
                 "application/x-bittorrent"
             )
             
@@ -193,13 +194,14 @@ class LaCaleService:
                 for tag_id in tag_ids:
                     form_data.append(("tags", tag_id))
             
-            # Fichier NFO optionnel
+            # Fichier NFO optionnel — lire en bytes pour compatibilité AsyncClient
             if nfo_file_path:
                 nfo_path = Path(nfo_file_path)
                 if nfo_path.exists():
+                    nfo_content = nfo_path.read_bytes()
                     files["nfoFile"] = (
                         nfo_path.name,
-                        open(nfo_file_path, "rb"),
+                        nfo_content,
                         "text/plain"
                     )
             
@@ -210,11 +212,6 @@ class LaCaleService:
                     data=form_data,
                     files=files
                 )
-            
-            # Fermer les fichiers ouverts
-            for file_tuple in files.values():
-                if hasattr(file_tuple[1], 'close'):
-                    file_tuple[1].close()
             
             if response.status_code != 200:
                 self._handle_error_response(response, context="upload")

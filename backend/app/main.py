@@ -18,7 +18,6 @@ from .routers import (
     torrent_router,
     mediainfo_router,
     presentation_router,
-    tags_router,
     settings_router,
     tmdb_router,
     lacale_router
@@ -48,7 +47,6 @@ app.include_router(files_router)
 app.include_router(torrent_router)
 app.include_router(mediainfo_router)
 app.include_router(presentation_router)
-app.include_router(tags_router)
 app.include_router(settings_router)
 app.include_router(tmdb_router)
 app.include_router(lacale_router)

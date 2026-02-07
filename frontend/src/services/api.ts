@@ -6,10 +6,9 @@ import type {
   TorrentResponse,
   MediaInfo,
   PresentationData,
-  TagsData,
   LaCaleMetaResponse,
   LaCaleUploadRequest,
-  LaCaleUploadResponse
+  LaCaleUploadResponse,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -137,28 +136,6 @@ export const presentationApi = {
 
   saveTemplate: async (template: string) => {
     const response = await api.post('/presentation/template', { template });
-    return response.data;
-  },
-};
-
-export const tagsApi = {
-  getAll: async (): Promise<TagsData> => {
-    const response = await api.get<TagsData>('/tags/');
-    return response.data;
-  },
-
-  getCategories: async () => {
-    const response = await api.get('/tags/categories');
-    return response.data;
-  },
-
-  getCategory: async (slug: string) => {
-    const response = await api.get(`/tags/category/${slug}`);
-    return response.data;
-  },
-
-  getSubcategories: async (categorySlug: string) => {
-    const response = await api.get(`/tags/subcategories/${categorySlug}`);
     return response.data;
   },
 };

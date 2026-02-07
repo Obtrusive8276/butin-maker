@@ -1,5 +1,6 @@
 """Service pour l'API La Cale - Upload automatique vers le tracker"""
 import logging
+import time
 from pathlib import Path
 from typing import Optional, List
 
@@ -20,6 +21,11 @@ class LaCaleService:
     
     DEFAULT_BASE_URL = "https://la-cale.space"
     TIMEOUT = 30.0  # secondes
+    META_CACHE_TTL = 300.0  # 5 minutes
+    
+    # Cache partagé entre toutes les instances (même processus)
+    _meta_cache: Optional[dict] = None
+    _meta_cache_time: float = 0.0
     
     def __init__(self, api_key: str, base_url: str = None):
         self.api_key = api_key
@@ -32,6 +38,12 @@ class LaCaleService:
         return {
             "X-Api-Key": self.api_key
         }
+    
+    @classmethod
+    def clear_meta_cache(cls):
+        """Invalide le cache des métadonnées"""
+        cls._meta_cache = None
+        cls._meta_cache_time = 0.0
     
     def _handle_error_response(self, response: httpx.Response, context: str = ""):
         """Gère les réponses d'erreur HTTP de l'API La Cale"""
@@ -54,6 +66,9 @@ class LaCaleService:
     async def fetch_meta(self) -> dict:
         """Récupère les métadonnées (catégories, tags) depuis l'API La Cale
         
+        Utilise un cache en mémoire (TTL 5 min) pour éviter de dépasser
+        la limite de requêtes de l'API (30/min).
+        
         Returns:
             dict avec categories, tagGroups, ungroupedTags
         
@@ -61,6 +76,13 @@ class LaCaleService:
             LaCaleError: En cas d'erreur HTTP (401, 403, 500, etc.)
             Exception: En cas de timeout ou erreur réseau
         """
+        # Vérifier le cache
+        now = time.monotonic()
+        if (LaCaleService._meta_cache is not None 
+                and now - LaCaleService._meta_cache_time < self.META_CACHE_TTL):
+            logger.debug("Métadonnées La Cale servies depuis le cache")
+            return LaCaleService._meta_cache
+        
         url = f"{self.base_url}/api/external/meta"
         headers = self._get_headers()
         
@@ -74,6 +96,11 @@ class LaCaleService:
             data = response.json()
             logger.info("Métadonnées La Cale récupérées: %d catégories, %d groupes de tags",
                        len(data.get("categories", [])), len(data.get("tagGroups", [])))
+            
+            # Mettre en cache
+            LaCaleService._meta_cache = data
+            LaCaleService._meta_cache_time = now
+            
             return data
             
         except httpx.TimeoutException as e:
@@ -110,7 +137,7 @@ class LaCaleService:
         
         for category in categories:
             # Vérifier dans les enfants (structure hiérarchique)
-            for child in category.get("children", []):
+            for child in (category.get("children") or []):
                 if child.get("slug") == target_slug:
                     return child["id"]
             # Vérifier aussi au niveau racine

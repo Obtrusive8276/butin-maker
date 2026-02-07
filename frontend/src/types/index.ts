@@ -119,6 +119,7 @@ export interface LaCaleTag {
   id: string;
   name: string;
   slug: string;
+  categories?: string[];  // Category slugs this tag belongs to (e.g., ["films", "series"])
 }
 
 export interface LaCaleTagGroup {

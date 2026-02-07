@@ -286,11 +286,6 @@ export const lacaleApi = {
     return response.data;
   },
 
-  getCategoryId: async (type: 'movie' | 'tv'): Promise<{ category_id: string }> => {
-    const response = await api.get<{ category_id: string }>(`/lacale/category?type=${type}`);
-    return response.data;
-  },
-
   upload: async (data: LaCaleUploadRequest): Promise<LaCaleUploadResponse> => {
     const response = await api.post<LaCaleUploadResponse>('/lacale/upload', data);
     return response.data;

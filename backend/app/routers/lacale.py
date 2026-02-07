@@ -1,7 +1,6 @@
 """Router FastAPI pour l'API La Cale"""
 import logging
 from fastapi import APIRouter, HTTPException
-from typing import Optional
 
 from ..config import user_settings
 from ..models.lacale import LaCaleUploadRequest, LaCaleUploadResponse
@@ -31,31 +30,6 @@ async def get_meta():
         raise HTTPException(status_code=e.status_code or 500, detail=str(e))
     except Exception as e:
         logger.error("Erreur inattendue (meta): %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/category")
-async def get_category(type: str):
-    """Retourne l'ID de catégorie pour un type de contenu (movie/tv)"""
-    service = _get_service()
-    try:
-        meta = await service.fetch_meta()
-        category_id = service.find_category_id(meta, type)
-        
-        if category_id is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Catégorie non trouvée pour le type '{type}'"
-            )
-        
-        return {"category_id": category_id}
-    except HTTPException:
-        raise
-    except LaCaleError as e:
-        logger.error("Erreur La Cale (category): %s", e)
-        raise HTTPException(status_code=e.status_code or 500, detail=str(e))
-    except Exception as e:
-        logger.error("Erreur inattendue (category): %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

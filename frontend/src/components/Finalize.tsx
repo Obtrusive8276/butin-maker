@@ -7,7 +7,7 @@ import { torrentApi, mediainfoApi, presentationApi, lacaleApi } from '../service
 import { useClipboard } from '../hooks/useClipboard';
 import { useCachedTags } from '../hooks/useCachedTags';
 import { getResolutionFromWidth } from '../utils/format';
-import { adaptMetaToTagGroups, findTagId } from '../utils/tagsAdapter';
+import { adaptMetaToTagGroups, findTagId, findCategoryId } from '../utils/tagsAdapter';
 import type { AdaptedTagGroup } from '../utils/tagsAdapter';
 import type { LaCaleUploadResponse } from '../types';
 
@@ -187,7 +187,7 @@ export default function Finalize() {
 
   // Charger les tags depuis l'API La Cale (avec cache localStorage)
   const { data: metaData, isLoading: isLoadingTags } = useCachedTags();
-  const tagGroups: AdaptedTagGroup[] = metaData ? adaptMetaToTagGroups(metaData) : [];
+  const tagGroups: AdaptedTagGroup[] = metaData ? adaptMetaToTagGroups(metaData, contentType) : [];
 
   // Présélection automatique des tags
   useEffect(() => {
@@ -375,8 +375,14 @@ export default function Finalize() {
     setUploadResult(null);
 
     try {
-      // 1. Get category ID from content type
-      const { category_id } = await lacaleApi.getCategoryId(contentType);
+      // 1. Get category ID from already-loaded meta data (no extra API call)
+      if (!metaData) {
+        throw new Error('Métadonnées non chargées. Veuillez patienter ou recharger la page.');
+      }
+      const category_id = findCategoryId(metaData, contentType);
+      if (!category_id) {
+        throw new Error(`Catégorie non trouvée pour le type "${contentType}".`);
+      }
 
       // 2. Build upload request
       const uploadRequest = {
@@ -411,8 +417,6 @@ export default function Finalize() {
           setUploadError('Ce torrent existe déjà sur La Cale (infohash identique).');
         } else if (status === 429) {
           setUploadError('Limite de 30 requêtes/minute dépassée. Veuillez patienter.');
-        } else if (status === 404 && detail?.includes('Catégorie')) {
-          setUploadError(`Catégorie non trouvée pour le type "${contentType}".`);
         } else {
           setUploadError(detail || `Erreur serveur (${status || 'inconnue'})`);
         }

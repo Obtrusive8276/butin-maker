@@ -2,7 +2,7 @@
 import pytest
 import sys
 import os
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -108,88 +108,6 @@ class TestLaCaleMetaEndpoint:
         
         assert response.status_code != 200 or (
             response.status_code == 200 and "error" in response.json()
-        )
-
-
-# ============================================================================
-# GET /lacale/category
-# ============================================================================
-
-class TestLaCaleCategoryEndpoint:
-    """Tests pour l'endpoint GET /lacale/category"""
-    
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        return TestClient(app)
-    
-    def test_category_movie(self, client):
-        """Vérifie que type=movie retourne cat_films"""
-        with patch('app.routers.lacale.LaCaleService') as MockService:
-            mock_instance = AsyncMock()
-            mock_instance.fetch_meta = AsyncMock(return_value={
-                "categories": [
-                    {
-                        "id": "cat_video", "name": "Vidéo", "slug": "video",
-                        "children": [
-                            {"id": "cat_films", "name": "Films", "slug": "films"},
-                            {"id": "cat_series", "name": "Séries TV", "slug": "series"}
-                        ]
-                    }
-                ],
-                "tagGroups": [],
-                "ungroupedTags": []
-            })
-            mock_instance.find_category_id = MagicMock(return_value="cat_films")
-            MockService.return_value = mock_instance
-            
-            response = client.get("/lacale/category?type=movie")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data.get("category_id") == "cat_films"
-    
-    def test_category_tv(self, client):
-        """Vérifie que type=tv retourne cat_series"""
-        with patch('app.routers.lacale.LaCaleService') as MockService:
-            mock_instance = AsyncMock()
-            mock_instance.fetch_meta = AsyncMock(return_value={
-                "categories": [
-                    {
-                        "id": "cat_video", "name": "Vidéo", "slug": "video",
-                        "children": [
-                            {"id": "cat_films", "name": "Films", "slug": "films"},
-                            {"id": "cat_series", "name": "Séries TV", "slug": "series"}
-                        ]
-                    }
-                ],
-                "tagGroups": [],
-                "ungroupedTags": []
-            })
-            mock_instance.find_category_id = MagicMock(return_value="cat_series")
-            MockService.return_value = mock_instance
-            
-            response = client.get("/lacale/category?type=tv")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data.get("category_id") == "cat_series"
-    
-    def test_category_invalid_type(self, client):
-        """Vérifie l'erreur avec un type invalide"""
-        with patch('app.routers.lacale.LaCaleService') as MockService:
-            mock_instance = AsyncMock()
-            mock_instance.fetch_meta = AsyncMock(return_value={
-                "categories": [], "tagGroups": [], "ungroupedTags": []
-            })
-            mock_instance.find_category_id = MagicMock(return_value=None)
-            MockService.return_value = mock_instance
-            
-            response = client.get("/lacale/category?type=invalid")
-        
-        # Doit indiquer que la catégorie n'est pas trouvée
-        assert response.status_code == 404 or (
-            response.status_code == 200 and response.json().get("category_id") is None
         )
 
 

@@ -73,6 +73,10 @@ class TestLaCaleServiceHeaders:
 class TestLaCaleServiceFetchMeta:
     """Tests pour la récupération des métadonnées (catégories, tags)"""
     
+    def setup_method(self):
+        """Nettoyer le cache avant chaque test"""
+        LaCaleService.clear_meta_cache()
+    
     @pytest.mark.asyncio
     async def test_fetch_meta_success(self):
         """Vérifie la récupération réussie des métadonnées"""
@@ -221,6 +225,145 @@ class TestLaCaleServiceFetchMeta:
 
 
 # ============================================================================
+# META CACHE
+# ============================================================================
+
+class TestLaCaleServiceMetaCache:
+    """Tests pour le cache en mémoire des métadonnées"""
+    
+    def setup_method(self):
+        """Nettoyer le cache avant chaque test"""
+        LaCaleService.clear_meta_cache()
+    
+    def teardown_method(self):
+        """Nettoyer le cache après chaque test"""
+        LaCaleService.clear_meta_cache()
+    
+    @pytest.mark.asyncio
+    async def test_fetch_meta_caches_result(self):
+        """Vérifie que le 2ème appel utilise le cache (pas d'appel HTTP)"""
+        service = LaCaleService(api_key="test_key")
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "categories": [{"id": "cat1"}],
+            "tagGroups": [],
+            "ungroupedTags": []
+        }
+        
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        
+        with patch('app.services.lacale_service.httpx.AsyncClient', return_value=mock_client):
+            result1 = await service.fetch_meta()
+            result2 = await service.fetch_meta()
+        
+        # Un seul appel HTTP, le 2ème vient du cache
+        assert mock_client.get.call_count == 1
+        assert result1 == result2
+    
+    @pytest.mark.asyncio
+    async def test_fetch_meta_cache_shared_across_instances(self):
+        """Vérifie que le cache est partagé entre instances"""
+        service1 = LaCaleService(api_key="key1")
+        service2 = LaCaleService(api_key="key2")
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "categories": [], "tagGroups": [], "ungroupedTags": []
+        }
+        
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        
+        with patch('app.services.lacale_service.httpx.AsyncClient', return_value=mock_client):
+            await service1.fetch_meta()
+            await service2.fetch_meta()
+        
+        # Le 2ème service utilise le cache du 1er
+        assert mock_client.get.call_count == 1
+    
+    @pytest.mark.asyncio
+    async def test_fetch_meta_cache_expires(self):
+        """Vérifie que le cache expire après le TTL"""
+        import time as time_module
+        service = LaCaleService(api_key="test_key")
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "categories": [], "tagGroups": [], "ungroupedTags": []
+        }
+        
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        
+        with patch('app.services.lacale_service.httpx.AsyncClient', return_value=mock_client):
+            await service.fetch_meta()
+            
+            # Forcer l'expiration du cache
+            LaCaleService._meta_cache_time -= LaCaleService.META_CACHE_TTL + 1
+            
+            await service.fetch_meta()
+        
+        # 2 appels HTTP car le cache a expiré
+        assert mock_client.get.call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_clear_meta_cache(self):
+        """Vérifie que clear_meta_cache() invalide le cache"""
+        service = LaCaleService(api_key="test_key")
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "categories": [], "tagGroups": [], "ungroupedTags": []
+        }
+        
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        
+        with patch('app.services.lacale_service.httpx.AsyncClient', return_value=mock_client):
+            await service.fetch_meta()
+            LaCaleService.clear_meta_cache()
+            await service.fetch_meta()
+        
+        # 2 appels HTTP car le cache a été invalidé
+        assert mock_client.get.call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_fetch_meta_cache_not_set_on_error(self):
+        """Vérifie que le cache n'est PAS mis à jour si l'API retourne une erreur"""
+        service = LaCaleService(api_key="test_key")
+        
+        mock_error_response = MagicMock()
+        mock_error_response.status_code = 500
+        mock_error_response.text = "Internal Server Error"
+        
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_error_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        
+        with patch('app.services.lacale_service.httpx.AsyncClient', return_value=mock_client):
+            with pytest.raises(Exception):
+                await service.fetch_meta()
+        
+        # Le cache reste vide après une erreur
+        assert LaCaleService._meta_cache is None
+
+
+# ============================================================================
 # FIND CATEGORY ID
 # ============================================================================
 
@@ -294,6 +437,42 @@ class TestLaCaleServiceFindCategory:
         
         result = service.find_category_id(meta_data, "movie")
         assert result is None
+    
+    def test_find_category_with_null_children(self):
+        """Vérifie que children=null (API réelle) ne crash pas"""
+        service = LaCaleService(api_key="test_key")
+        
+        meta_data = {
+            "categories": [
+                {
+                    "id": "cat_video",
+                    "name": "Vidéo",
+                    "slug": "video",
+                    "children": [
+                        {"id": "cat_films", "name": "Films", "slug": "films"},
+                        {"id": "cat_series", "name": "Séries TV", "slug": "series"}
+                    ]
+                },
+                {
+                    "id": "cat_audio",
+                    "name": "Audio",
+                    "slug": "audio",
+                    "children": None  # <-- L'API La Cale retourne null
+                },
+                {
+                    "id": "cat_other",
+                    "name": "Autres",
+                    "slug": "autres"
+                    # Pas de clé children du tout
+                }
+            ],
+            "tagGroups": [],
+            "ungroupedTags": []
+        }
+        
+        # Doit trouver Films sans crasher sur Audio (children=null)
+        assert service.find_category_id(meta_data, "movie") == "cat_films"
+        assert service.find_category_id(meta_data, "tv") == "cat_series"
     
     def test_find_category_empty_categories(self):
         """Vérifie le comportement avec une liste de catégories vide"""

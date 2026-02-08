@@ -3,7 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, ArrowLeft, Loader2, Check, Copy, FolderOpen, AlertCircle } from 'lucide-react';
 import { mediainfoApi, filesApi, tmdbApi } from '../services/api';
 import { useAppStore } from '../stores/appStore';
-import { formatSize, formatDuration, getResolutionFromWidth } from '../utils/format';
+import {
+  formatSize,
+  formatDuration,
+  getResolutionFromWidth,
+  formatAudioLanguages,
+  formatSubtitleLanguages,
+} from '../utils/format';
 import { useClipboard } from '../hooks/useClipboard';
 
 export default function MediaInfoViewer() {
@@ -93,10 +99,8 @@ export default function MediaInfoViewer() {
         format: mediaInfo.container || '',
         video_codec: video?.codec || '',
         audio_codec: audio?.codec || '',
-        languages: mediaInfo.audio_tracks.map(a => a.language || 'Unknown').join(', '),
-        subtitles: mediaInfo.subtitle_tracks.length > 0 
-          ? mediaInfo.subtitle_tracks.map(s => s.language || 'Unknown').join(', ')
-          : 'Aucun',
+        languages: formatAudioLanguages(mediaInfo.audio_tracks),
+        subtitles: formatSubtitleLanguages(mediaInfo.subtitle_tracks),
         size: formatSize(mediaInfo.file_size),
       });
     }

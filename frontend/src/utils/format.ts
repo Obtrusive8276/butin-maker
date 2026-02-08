@@ -2,6 +2,8 @@
  * Utilitaires de formatage partagés
  */
 
+import type { AudioTrack, SubtitleTrack } from '../types';
+
 /**
  * Formate une taille en bytes en format lisible (KB, MB, GB, etc.)
  */
@@ -43,4 +45,97 @@ export const getResolutionFromWidth = (width: number | null | undefined): string
   if (width >= 1024) return '576p';
   if (width >= 720) return '480p';
   return `${width}p`;
+};
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  fr: 'Français',
+  fra: 'Français',
+  fre: 'Français',
+  french: 'Français',
+  en: 'Anglais',
+  eng: 'Anglais',
+  english: 'Anglais',
+  it: 'Italien',
+  ita: 'Italien',
+  italian: 'Italien',
+  es: 'Espagnol',
+  spa: 'Espagnol',
+  spanish: 'Espagnol',
+  de: 'Allemand',
+  deu: 'Allemand',
+  ger: 'Allemand',
+  german: 'Allemand',
+  ja: 'Japonais',
+  jpn: 'Japonais',
+  japanese: 'Japonais',
+};
+
+const normalizeLanguage = (value: string | null | undefined): string => {
+  return (value || '').trim().toLowerCase();
+};
+
+const getLanguageLabel = (value: string | null | undefined): string => {
+  const normalized = normalizeLanguage(value);
+  if (!normalized) return 'Inconnue';
+  return LANGUAGE_LABELS[normalized] || value || 'Inconnue';
+};
+
+const detectFrenchVariant = (
+  releaseName: string | null | undefined,
+  audioTracks: AudioTrack[]
+): 'VFF' | 'VFQ' | 'VFI' | null => {
+  const release = (releaseName || '').toUpperCase();
+  const titles = audioTracks.map((track) => (track.title || '').toUpperCase()).join(' ');
+  const source = `${release} ${titles}`;
+
+  if (source.includes('TRUEFRENCH') || source.includes('VFF')) return 'VFF';
+  if (source.includes('VFQ')) return 'VFQ';
+  if (source.includes('VFI')) return 'VFI';
+  return null;
+};
+
+export const formatAudioLanguages = (
+  audioTracks: AudioTrack[] | null | undefined,
+  releaseName?: string | null
+): string => {
+  if (!audioTracks || audioTracks.length === 0) return 'Inconnue';
+
+  const frenchVariant = detectFrenchVariant(releaseName, audioTracks);
+  const labels: string[] = [];
+
+  for (const track of audioTracks) {
+    const normalized = normalizeLanguage(track.language);
+    let label = getLanguageLabel(track.language);
+
+    if ((normalized === 'fr' || normalized === 'fra' || normalized === 'fre' || normalized === 'french') && frenchVariant) {
+      label = `Français (${frenchVariant})`;
+    }
+
+    if (!labels.includes(label)) {
+      labels.push(label);
+    }
+  }
+
+  return labels.length > 0 ? labels.join(', ') : 'Inconnue';
+};
+
+export const formatSubtitleLanguages = (
+  subtitleTracks: SubtitleTrack[] | null | undefined
+): string => {
+  if (!subtitleTracks || subtitleTracks.length === 0) return 'Aucun';
+
+  const labels: string[] = [];
+
+  for (const track of subtitleTracks) {
+    const title = (track.title || '').toLowerCase();
+    const isForced = Boolean(track.forced) || title.includes('forced') || title.includes('force');
+    const base = getLanguageLabel(track.language);
+    const label = isForced ? `${base} (forcé)` : base;
+
+    if (!labels.includes(label)) {
+      labels.push(label);
+    }
+  }
+
+  return labels.length > 0 ? labels.join(', ') : 'Aucun';
 };

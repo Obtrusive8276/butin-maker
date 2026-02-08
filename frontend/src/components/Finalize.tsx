@@ -6,7 +6,7 @@ import { useAppStore } from '../stores/appStore';
 import { torrentApi, mediainfoApi, presentationApi, lacaleApi } from '../services/api';
 import { useClipboard } from '../hooks/useClipboard';
 import { useCachedTags } from '../hooks/useCachedTags';
-import { getResolutionFromWidth } from '../utils/format';
+import { getResolutionFromWidth, formatAudioLanguages, formatSubtitleLanguages } from '../utils/format';
 import { adaptMetaToTagGroups, findTagId, findCategoryId } from '../utils/tagsAdapter';
 import type { AdaptedTagGroup } from '../utils/tagsAdapter';
 import type { LaCaleUploadResponse } from '../types';
@@ -176,8 +176,8 @@ export default function Finalize() {
         format: mediaInfo?.container || '',
         video_codec: mediaInfo?.video_tracks?.[0]?.codec || '',
         audio_codec: mediaInfo?.audio_tracks?.[0]?.codec || '',
-        languages: mediaInfo?.audio_tracks?.map(t => t.language).filter(Boolean).join(', ') || '',
-        subtitles: mediaInfo?.subtitle_tracks?.map(t => t.language).filter(Boolean).join(', ') || 'Aucun',
+        languages: formatAudioLanguages(mediaInfo?.audio_tracks, releaseName),
+        subtitles: formatSubtitleLanguages(mediaInfo?.subtitle_tracks),
         size: selectedFiles[0]?.size ? `${(selectedFiles[0].size / (1024 * 1024 * 1024)).toFixed(2)} GB` : ''
       };
       setPresentationData(data);

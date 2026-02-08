@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { formatSize, formatDuration, getResolutionFromWidth } from './format';
+import {
+  formatSize,
+  formatDuration,
+  getResolutionFromWidth,
+  formatAudioLanguages,
+  formatSubtitleLanguages,
+} from './format';
+import type { AudioTrack, SubtitleTrack } from '../types';
 
 describe('formatSize', () => {
   it('retourne "0 B" pour 0 bytes', () => {
@@ -69,5 +76,50 @@ describe('getResolutionFromWidth', () => {
   it('gere les petites resolutions non-standard', () => {
     expect(getResolutionFromWidth(640)).toBe('640p');
     expect(getResolutionFromWidth(320)).toBe('320p');
+  });
+});
+
+describe('formatAudioLanguages', () => {
+  it('affiche les langues en toutes lettres', () => {
+    const audioTracks: AudioTrack[] = [
+      { codec: null, channels: null, bitrate: null, language: 'fra', title: null },
+      { codec: null, channels: null, bitrate: null, language: 'eng', title: null },
+    ];
+
+    expect(formatAudioLanguages(audioTracks)).toBe('Français, Anglais');
+  });
+
+  it('detecte TRUEFRENCH et affiche Francais (VFF)', () => {
+    const audioTracks: AudioTrack[] = [
+      { codec: null, channels: null, bitrate: null, language: 'fra', title: null },
+    ];
+
+    expect(formatAudioLanguages(audioTracks, 'Mon.Film.2024.TRUEFRENCH.1080p')).toBe('Français (VFF)');
+  });
+
+  it('detecte VFF et affiche Francais (VFF)', () => {
+    const audioTracks: AudioTrack[] = [
+      { codec: null, channels: null, bitrate: null, language: 'fr', title: 'French VFF' },
+    ];
+
+    expect(formatAudioLanguages(audioTracks)).toBe('Français (VFF)');
+  });
+});
+
+describe('formatSubtitleLanguages', () => {
+  it('affiche Francais pour sous-titres complets', () => {
+    const subtitleTracks: SubtitleTrack[] = [
+      { codec: null, language: 'fra', forced: false, title: 'French Full' },
+    ];
+
+    expect(formatSubtitleLanguages(subtitleTracks)).toBe('Français');
+  });
+
+  it('affiche Francais (force) pour sous-titres forces', () => {
+    const subtitleTracks: SubtitleTrack[] = [
+      { codec: null, language: 'fra', forced: true, title: 'French Forced' },
+    ];
+
+    expect(formatSubtitleLanguages(subtitleTracks)).toBe('Français (forcé)');
   });
 });

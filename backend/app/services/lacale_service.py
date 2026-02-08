@@ -215,11 +215,13 @@ class LaCaleService:
                 data["coverUrl"] = cover_url
             
             # Tags (champ répété)
-            # httpx gère les champs répétés via une liste de tuples
-            form_data = list(data.items())
+            # IMPORTANT: avec AsyncClient, passer data en liste de tuples
+            # génère un stream sync (IteratorByteStream) et provoque:
+            # "Attempted to send an sync request with an AsyncClient instance."
+            # On passe donc un dict avec liste pour que httpx construise
+            # un MultipartStream compatible async.
             if tag_ids:
-                for tag_id in tag_ids:
-                    form_data.append(("tags", tag_id))
+                data["tags"] = tag_ids
             
             # Fichier NFO optionnel — lire en bytes pour compatibilité AsyncClient
             if nfo_file_path:
@@ -236,7 +238,7 @@ class LaCaleService:
                 response = await client.post(
                     url,
                     headers=headers,
-                    data=form_data,
+                    data=data,
                     files=files
                 )
             

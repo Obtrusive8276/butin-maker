@@ -807,6 +807,54 @@ class TestLaCaleServiceUpload:
                 )
             assert "timeout" in str(exc_info.value).lower() or "timed out" in str(exc_info.value).lower()
 
+    @pytest.mark.asyncio
+    async def test_upload_asyncclient_multipart_with_tags_does_not_raise_sync_stream_error(self, tmp_path):
+        """Non-régression: upload multipart + tags fonctionne avec AsyncClient."""
+        import httpx
+
+        service = LaCaleService(api_key="valid_key")
+
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.write_bytes(b"fake torrent data")
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            assert request.method == "POST"
+            assert request.url.path == "/api/external/upload"
+            assert "multipart/form-data" in request.headers.get("content-type", "")
+
+            body = await request.aread()
+            assert b'name="tags"' in body
+            assert b'tag_1080p' in body
+            assert b'tag_bluray' in body
+
+            return httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "id": "ok123",
+                    "slug": "ok-slug",
+                    "link": "https://la-cale.space/torrents/ok-slug",
+                },
+            )
+
+        transport = httpx.MockTransport(handler)
+        real_async_client = httpx.AsyncClient
+
+        def async_client_factory(*args, **kwargs):
+            timeout = kwargs.get("timeout", 30.0)
+            return real_async_client(transport=transport, timeout=timeout)
+
+        with patch('app.services.lacale_service.httpx.AsyncClient', side_effect=async_client_factory):
+            result = await service.upload(
+                title="Mon.Film.2024.MULTi.1080p.BluRay.x264-TEAM",
+                category_id="cat_films",
+                torrent_file_path=str(torrent_file),
+                tag_ids=["tag_1080p", "tag_bluray"],
+            )
+
+        assert result["success"] is True
+        assert result["id"] == "ok123"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
